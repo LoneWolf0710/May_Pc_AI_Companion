@@ -1,0 +1,17 @@
+fastapi>=0.110.0
+uvicorn>=0.29.0
+httpx>=0.27.0
+pydantic>=2.6.0
+aiofiles>=23.2.0
+# Phase 3: Voice
+# silero-vad>=4.1.0
+# faster-whisper>=1.0.0
+# piper-tts>=1.2.0
+# sounddevice>=0.4.6
+# Phase 4: System Control (Windows)
+psutil>=5.9.0
+# pycaw>=20230407
+# screen_brightness_control>=0.22.0
+# Phase 5: Memory
+lancedb>=0.6.0
+sentence-transformers>=2.5.0
