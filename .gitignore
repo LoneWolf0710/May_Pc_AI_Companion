@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/Frameworks/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Environment / Secrets
+.env
+.env.local
+.env.*.local
+.api_keys.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS
+.DS_Store
+Desktop.ini
+ehthumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Misc
+nul
+*.iml
+*.tmp
+*.temp
