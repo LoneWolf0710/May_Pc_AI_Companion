@@ -1,6 +1,6 @@
 # 🌸 May — AI Desktop Companion
 
-**May** is a full-featured desktop AI companion that runs locally on Windows, controls your PC via voice/text commands, and has long-term memory. She's inspired by Shikimori from *Shikimori Not Just a Cutie* — cool, calm, caring, and subtly adorable.
+**May** is a full-featured desktop AI companion that runs locally on Windows, controls your PC via voice/text commands, and has long-term memory. 
 
 > **Repository:** [LoneWolf0710/May_Pc_AI_Companion](https://github.com/LoneWolf0710/May_Pc_AI_Companion/tree/May) (`May` branch)
 
