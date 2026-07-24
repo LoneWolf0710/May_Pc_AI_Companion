@@ -51,7 +51,18 @@ ehthumbs.db
 
 # Logs
 *.log
+*.log.*
 npm-debug.log*
+core/logs/
+
+# Binaries & Executables
+src-tauri/binaries/
+
+# Screenshots
+backend/screenshot.png
+backend/screenshot_full.png
+screenshot.png
+screenshot_full.png
 
 # Misc
 nul
@@ -59,3 +70,4 @@ nul
 *.tmp
 *.temp
 data/
+
