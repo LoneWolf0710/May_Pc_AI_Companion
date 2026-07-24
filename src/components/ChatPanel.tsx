@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import type { MayState, Message } from "../App";
 import { ModelSelector } from "./ModelSelector";
+import { RenderedMessage } from "./CodeBlock";
 
 interface ModelInfo {
   provider: string;
@@ -26,6 +27,16 @@ interface ChatPanelProps {
   liveTranscript?: string;
   speechError?: string | null;
   sttSupported?: boolean;
+  onOpenMeeting?: () => void;
+  onOpenGhost?: () => void;
+  onOpenRemote?: () => void;
+  onOpenAutoTuner?: () => void;
+  onOpenInternetLearning?: () => void;
+  onOpenSkills?: () => void;
+  onOpenMoodTimeline?: () => void;
+  onOpenWorkflows?: () => void;
+  continuousMode?: boolean;
+  onToggleContinuous?: () => void;
 }
 
 export function ChatPanel({
@@ -42,6 +53,16 @@ export function ChatPanel({
   liveTranscript = "",
   speechError = null,
   sttSupported = true,
+  onOpenMeeting,
+  onOpenGhost,
+  onOpenRemote,
+  onOpenAutoTuner,
+  onOpenInternetLearning,
+  onOpenSkills,
+  onOpenMoodTimeline,
+  onOpenWorkflows,
+  continuousMode = false,
+  onToggleContinuous,
 }: ChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [typedValue, setTypedValue] = useState("");
@@ -79,20 +100,29 @@ export function ChatPanel({
           </div>
         )}
         <div className="space-y-3">
-          {messages.map((msg, idx) => (
+          {messages.map((msg, idx) => {
+            // Varied max-width for organic feel (55%-75%)
+            const maxW = msg.role === "user"
+              ? 55 + ((idx * 7 + 3) % 20) // 55-75%
+              : 60 + ((idx * 11 + 5) % 18); // 60-78%
+            // Slight random rotation for handwritten feel
+            const rotation = ((idx * 17 + 3) % 10) * 0.1 - 0.5; // -0.5 to 0.4
+
+            return (
             <motion.div
               key={msg.id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.15 }}
+              initial={{ opacity: 0, x: msg.role === "user" ? 20 : -20, rotate: rotation }}
+              animate={{ opacity: 1, x: 0, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[75%] px-4 py-2.5 ${
+                className={`message-content px-4 py-2.5 ${
                   msg.role === "user"
                     ? "bg-surface-elevated border border-border rounded-2xl rounded-br-md"
                     : "bg-surface border border-border rounded-2xl rounded-bl-md"
                 }`}
+                style={{ maxWidth: `${maxW}%` }}
               >
                 {msg.role === "may" && (
                   <div className="flex items-center gap-1.5 mb-1.5">
@@ -105,8 +135,8 @@ export function ChatPanel({
                     </span>
                   </div>
                 )}
-                <p className="text-sm leading-relaxed text-text whitespace-pre-wrap">
-                  {msg.content}
+                <div className="text-sm leading-relaxed text-text">
+                  <RenderedMessage content={msg.content} />
                   {msg.role === "may" &&
                     mayState === "thinking" &&
                     idx === messages.length - 1 && (
@@ -116,10 +146,11 @@ export function ChatPanel({
                         <span className="w-1 h-1 bg-accent rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
                       </span>
                     )}
-                </p>
+                </div>
               </div>
             </motion.div>
-          ))}
+            );
+          })}
         </div>
         <div ref={messagesEndRef} />
       </div>
@@ -196,6 +227,103 @@ export function ChatPanel({
             <div className="absolute bottom-0 left-3 right-3 h-[1.5px] bg-accent/0 group-focus-within:bg-accent/40 rounded-full transition-colors pointer-events-none" />
           </div>
 
+          {/* Meeting & Ghost mode buttons */}
+          {onOpenMeeting && (
+            <button
+              type="button"
+              onClick={onOpenMeeting}
+              className="flex-shrink-0 w-9 h-9 rounded-xl bg-surface-elevated border border-border flex items-center justify-center hover:border-accent/30 transition-all group"
+              title="Meeting Mode"
+            >
+              <span className="text-sm group-hover:scale-110 transition-transform">🎙️</span>
+            </button>
+          )}
+          {onOpenGhost && (
+            <button
+              type="button"
+              onClick={onOpenGhost}
+              className="flex-shrink-0 w-9 h-9 rounded-xl bg-surface-elevated border border-border flex items-center justify-center hover:border-accent/30 transition-all group"
+              title="Ghost Mode"
+            >
+              <span className="text-sm group-hover:scale-110 transition-transform">👻</span>
+            </button>
+          )}
+          {onOpenRemote && (
+            <button
+              type="button"
+              onClick={onOpenRemote}
+              className="flex-shrink-0 w-9 h-9 rounded-xl bg-surface-elevated border border-border flex items-center justify-center hover:border-accent/30 transition-all group"
+              title="Remote Control"
+            >
+              <span className="text-sm group-hover:scale-110 transition-transform">📱</span>
+            </button>
+          )}
+          {onOpenAutoTuner && (
+            <button
+              type="button"
+              onClick={onOpenAutoTuner}
+              className="flex-shrink-0 w-9 h-9 rounded-xl bg-surface-elevated border border-border flex items-center justify-center hover:border-accent/30 transition-all group"
+              title="Auto-Tuner"
+            >
+              <span className="text-sm group-hover:scale-110 transition-transform">🧬</span>
+            </button>
+          )}
+          {onOpenInternetLearning && (
+            <button
+              type="button"
+              onClick={onOpenInternetLearning}
+              className="flex-shrink-0 w-9 h-9 rounded-xl bg-surface-elevated border border-border flex items-center justify-center hover:border-accent/30 transition-all group"
+              title="Internet Learning"
+            >
+              <span className="text-sm group-hover:scale-110 transition-transform">🌐</span>
+            </button>
+          )}
+          {onOpenSkills && (
+            <button
+              type="button"
+              onClick={onOpenSkills}
+              className="flex-shrink-0 w-9 h-9 rounded-xl bg-surface-elevated border border-border flex items-center justify-center hover:border-accent/30 transition-all group"
+              title="Learned Skills"
+            >
+              <span className="text-sm group-hover:scale-110 transition-transform">🧠</span>
+            </button>
+          )}
+          {onOpenMoodTimeline && (
+            <button
+              type="button"
+              onClick={onOpenMoodTimeline}
+              className="flex-shrink-0 w-9 h-9 rounded-xl bg-surface-elevated border border-border flex items-center justify-center hover:border-accent/30 transition-all group"
+              title="Mood History"
+            >
+              <span className="text-sm group-hover:scale-110 transition-transform">🎭</span>
+            </button>
+          )}
+          {/* P6: Workflows toggle */}
+          {onOpenWorkflows && (
+            <button
+              type="button"
+              onClick={onOpenWorkflows}
+              className="flex-shrink-0 w-9 h-9 rounded-xl bg-surface-elevated border border-border flex items-center justify-center hover:border-accent/30 transition-all group"
+              title="Automated Workflows"
+            >
+              <span className="text-sm group-hover:scale-110 transition-transform">⚡</span>
+            </button>
+          )}
+          {/* P6: Continuous conversation toggle */}
+          {onToggleContinuous && (
+            <button
+              type="button"
+              onClick={onToggleContinuous}
+              className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                continuousMode
+                  ? "bg-accent/20 border border-accent/40 shadow-glow"
+                  : "bg-surface-elevated border border-border hover:border-accent/30"
+              }`}
+              title={continuousMode ? "Disable continuous conversation" : "Enable continuous conversation"}
+            >
+              <span className={`text-sm ${continuousMode ? "scale-110" : ""}`}>🔄</span>
+            </button>
+          )}
           {/* Send button */}
           <button
             type="submit"

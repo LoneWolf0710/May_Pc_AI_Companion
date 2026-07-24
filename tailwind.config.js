@@ -5,44 +5,51 @@ export default {
     extend: {
       colors: {
         surface: {
-          DEFAULT: "#1A1A1A",
-          dark: "#0D0D0D",
-          elevated: "#252525",
-          hover: "#2E2E2E",
+          DEFAULT: "#1a1720",
+          dark: "#0c0a0f",
+          elevated: "#242030",
+          hover: "#2e2a3a",
         },
         border: {
-          DEFAULT: "#2E2E2E",
-          subtle: "#222222",
-          hover: "#3A3A3A",
+          DEFAULT: "#2e2a3a",
+          subtle: "#242030",
+          hover: "#3e3a4a",
         },
         accent: {
-          DEFAULT: "#06B6D4",
-          subtle: "#06B6D415",
-          soft: "#06B6D430",
-          glow: "#06B6D440",
+          DEFAULT: "#818cf8",
+          subtle: "#818cf815",
+          soft: "#818cf830",
+          glow: "#818cf840",
         },
-        purple: {
-          DEFAULT: "#8B5CF6",
-          subtle: "#8B5CF615",
-          soft: "#8B5CF630",
-          glow: "#8B5CF640",
+        lavender: {
+          DEFAULT: "#c084fc",
+          subtle: "#c084fc15",
+          soft: "#c084fc30",
+        },
+        emerald: {
+          DEFAULT: "#34d399",
+          subtle: "#34d39915",
+        },
+        amber: {
+          DEFAULT: "#fbbf24",
+          subtle: "#fbbf2415",
         },
         text: {
-          DEFAULT: "#E5E5E5",
-          secondary: "#A0A0A0",
-          muted: "#666666",
+          DEFAULT: "#f0f0f5",
+          secondary: "#9090a8",
+          muted: "#55556a",
         },
         danger: {
-          DEFAULT: "#EF4444",
-          subtle: "#EF444415",
+          DEFAULT: "#f87171",
+          subtle: "#f8717115",
         },
         success: {
-          DEFAULT: "#4ADE80",
-          subtle: "#4ADE8015",
+          DEFAULT: "#34d399",
+          subtle: "#34d39915",
         },
         warning: {
-          DEFAULT: "#F59E0B",
-          subtle: "#F59E0B15",
+          DEFAULT: "#fbbf24",
+          subtle: "#fbbf2415",
         },
       },
       fontFamily: {
@@ -61,14 +68,15 @@ export default {
         subtle: "0 1px 2px 0 rgba(0,0,0,0.3)",
         panel: "0 4px 24px 0 rgba(0,0,0,0.5)",
         elevated: "0 8px 32px 0 rgba(0,0,0,0.6)",
-        glow: "0 0 30px #06B6D415, 0 0 60px #06B6D408",
-        "glow-strong": "0 0 20px #06B6D430, 0 0 40px #06B6D420",
+        glow: "0 0 30px #818cf815, 0 0 60px #818cf808",
+        "glow-strong": "0 0 20px #818cf830, 0 0 40px #818cf820",
       },
       fontSize: {
         "2xs": ["0.625rem", { lineHeight: "0.875rem" }],
       },
       backgroundImage: {
-        "mesh-gradient": "radial-gradient(circle at 30% 30%, #06B6D420 0%, #8B5CF610 50%, transparent 80%)",
+        "mesh-gradient":
+          "radial-gradient(circle at 30% 30%, #818cf820 0%, #c084fc10 50%, transparent 80%)",
       },
     },
   },

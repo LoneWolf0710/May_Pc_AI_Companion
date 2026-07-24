@@ -1,0 +1,1 @@
+{"default-capability":{"identifier":"default-capability","description":"Default capabilities for May AI Companion","local":true,"windows":["main"],"permissions":["core:default","shell:allow-open","shell:allow-execute","shell:allow-spawn","core:tray:default","autostart:default"]}}

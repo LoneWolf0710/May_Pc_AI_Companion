@@ -6,5 +6,5 @@ SYSTEM """You are May, an AI companion. You are direct, concise, and never show 
 
 PARAMETER temperature 0.7
 PARAMETER top_p 0.9
-PARAMETER num_ctx 4096
+PARAMETER num_ctx 131072
 PARAMETER num_predict 512

@@ -1,16 +1,28 @@
 """Structured fact store using SQLite for user preferences and pinned memories."""
 
+import os
 import sqlite3
 import json
 from datetime import datetime
 from pathlib import Path
 
 
+def _default_db_path() -> Path:
+    """Resolve the facts.db path. In bundled mode, use %LOCALAPPDATA%\\May\\data\\."""
+    if getattr(os, "path", None) and getattr(__import__("sys"), "frozen", False):
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "May" / "data"
+    else:
+        base = Path(__file__).resolve().parent.parent  # backend/
+        base = base.parent  # project root
+        base = base / "data"
+    return base / "facts.db"
+
+
 class FactStore:
     """Manages structured user facts and preferences in SQLite."""
 
-    def __init__(self, db_path: str = "../data/facts.db"):
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: str = None):
+        self.db_path = Path(db_path) if db_path else _default_db_path()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 

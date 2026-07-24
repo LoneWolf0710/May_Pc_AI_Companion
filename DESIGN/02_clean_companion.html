@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>May — Clean Companion Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0b;
+    --surface: #141416;
+    --surface-hover: #1c1c1f;
+    --border: #222225;
+    --accent: #6366f1;
+    --accent-soft: #6366f120;
+    --success: #22c55e;
+    --warning: #eab308;
+    --text: #f0f0f2;
+    --text-secondary: #8888a0;
+    --text-muted: #555568;
+    --radius: 16px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Layout — Centered, focused ── */
+  .app-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    height: 100vh;
+    position: relative;
+  }
+
+  /* ── Ambient glow behind avatar ── */
+  .ambient-glow {
+    position: fixed;
+    top: 15%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+    pointer-events: none;
+    animation: ambientPulse 6s ease-in-out infinite;
+  }
+
+  @keyframes ambientPulse {
+    0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+    50% { opacity: 1; transform: translateX(-50%) scale(1.1); }
+  }
+
+  /* ── Top status pill ── */
+  .status-pill {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    z-index: 10;
+    backdrop-filter: blur(20px);
+  }
+
+  .status-pill .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+  }
+
+  .status-pill .divider {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+  }
+
+  /* ── Center content ── */
+  .center-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding-bottom: 120px;
+  }
+
+  /* ── Avatar — Soft, warm orb ── */
+  .avatar-wrap {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    margin-bottom: 32px;
+  }
+
+  .avatar-orb {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, rgba(99,102,241,0.3), transparent 50%),
+      radial-gradient(circle at 65% 70%, rgba(168,85,247,0.2), transparent 50%),
+      linear-gradient(135deg, #1a1a2e, #0f0f1a);
+    box-shadow:
+      0 20px 60px rgba(0,0,0,0.4),
+      0 0 80px rgba(99,102,241,0.08),
+      inset 0 -20px 40px rgba(0,0,0,0.3);
+    animation: orbFloat 5s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .avatar-orb::before {
+    content: '';
+    position: absolute;
+    top: 15%;
+    left: 20%;
+    width: 40%;
+    height: 25%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.12), transparent);
+    border-radius: 50%;
+    transform: rotate(-15deg);
+  }
+
+  .avatar-orb::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  @keyframes orbFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  /* Mood ring around avatar */
+  .mood-ring {
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--accent);
+    border-right-color: rgba(168,85,247,0.4);
+    animation: moodSpin 8s linear infinite;
+    opacity: 0.6;
+  }
+
+  @keyframes moodSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .avatar-name {
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: 8px;
+    color: var(--text);
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  .avatar-status {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  /* ── Quick suggestion chips ── */
+  .suggestions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 500px;
+    margin-bottom: 40px;
+  }
+
+  .chip {
+    padding: 8px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .chip:hover {
+    background: var(--surface-hover);
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  /* ── Chat history (collapsed) ── */
+  .chat-preview {
+    max-width: 500px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0 20px;
+  }
+
+  .msg {
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: msgIn 0.3s ease;
+  }
+
+  .msg.user {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    align-self: flex-end;
+    max-width: 70%;
+  }
+
+  .msg.may {
+    background: var(--accent-soft);
+    border: 1px solid rgba(99,102,241,0.15);
+    align-self: flex-start;
+    max-width: 70%;
+  }
+
+  .msg .tool-tag {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 8px;
+    background: rgba(99,102,241,0.1);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Input bar — Floating, centered ── */
+  .input-container {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: min(560px, calc(100vw - 48px));
+    padding: 8px 8px 8px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    z-index: 10;
+    backdrop-filter: blur(20px);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .input-container:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 30px rgba(99,102,241,0.1);
+  }
+
+  .input-container input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .input-container input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .send-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .send-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(99,102,241,0.3);
+  }
+
+  /* ── Side drawer — Settings/Tools ── */
+  .side-drawer {
+    position: fixed;
+    top: 0;
+    right: -320px;
+    width: 320px;
+    height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 24px;
+    z-index: 20;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+  }
+
+  .side-drawer.open {
+    right: 0;
+  }
+
+  .drawer-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .drawer-toggle:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .drawer-section {
+    margin-bottom: 24px;
+  }
+
+  .drawer-section h3 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .drawer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .drawer-row .label { color: var(--text-secondary); }
+  .drawer-row .value { color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+  .hormone-mini {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .hormone-mini .name {
+    font-size: 11px;
+    color: var(--text-muted);
+    width: 70px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .hormone-mini .track {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .hormone-mini .track .fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s ease;
+  }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 19;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="ambient-glow"></div>
+
+<!-- Status Pill -->
+<div class="status-pill">
+  <div class="dot"></div>
+  <span>May</span>
+  <div class="divider"></div>
+  <span>phi4-mini 3.8B</span>
+  <div class="divider"></div>
+  <span>GPU 58%</span>
+  <div class="divider"></div>
+  <span>4.2 GB VRAM</span>
+</div>
+
+<!-- Drawer Toggle -->
+<button class="drawer-toggle" id="drawerToggle">⚙</button>
+
+<!-- Side Drawer -->
+<div class="overlay" id="overlay"></div>
+<div class="side-drawer" id="sideDrawer">
+  <div class="drawer-section">
+    <h3>Endocrine</h3>
+    <div class="hormone-mini"><span class="name">cortisol</span><div class="track"><div class="fill" style="width:25%;background:#ef4444"></div></div></div>
+    <div class="hormone-mini"><span class="name">dopamine</span><div class="track"><div class="fill" style="width:65%;background:#22c55e"></div></div></div>
+    <div class="hormone-mini"><span class="name">serotonin</span><div class="track"><div class="fill" style="width:70%;background:#eab308"></div></div></div>
+    <div class="hormone-mini"><span class="name">adrenaline</span><div class="track"><div class="fill" style="width:15%;background:#f97316"></div></div></div>
+    <div class="hormone-mini"><span class="name">oxytocin</span><div class="track"><div class="fill" style="width:45%;background:#ec4899"></div></div></div>
+    <div class="hormone-mini"><span class="name">endorphin</span><div class="track"><div class="fill" style="width:35%;background:#8b5cf6"></div></div></div>
+  </div>
+  <div class="drawer-section">
+    <h3>System</h3>
+    <div class="drawer-row"><span class="label">Sleep State</span><span class="value" style="color:var(--success)">WAKE</span></div>
+    <div class="drawer-row"><span class="label">Idle Time</span><span class="value">0s</span></div>
+    <div class="drawer-row"><span class="label">Control Mode</span><span class="value">ASK_BEFORE</span></div>
+    <div class="drawer-row"><span class="label">Daemon</span><span class="value" style="color:var(--success)">ONLINE</span></div>
+  </div>
+  <div class="drawer-section">
+    <h3>Memory</h3>
+    <div class="drawer-row"><span class="label">Episodic</span><span class="value">12 entries</span></div>
+    <div class="drawer-row"><span class="label">Semantic</span><span class="value">8 facts</span></div>
+    <div class="drawer-row"><span class="label">Skills</span><span class="value">3 procedures</span></div>
+  </div>
+</div>
+
+<!-- Center Content -->
+<div class="center-content">
+  <div class="avatar-wrap">
+    <div class="mood-ring"></div>
+    <div class="avatar-orb"></div>
+  </div>
+  <div class="avatar-name">M A Y</div>
+  <div class="avatar-status">Ready</div>
+
+  <div class="suggestions">
+    <div class="chip">🌤 What's the weather?</div>
+    <div class="chip">📰 Show me tech news</div>
+    <div class="chip">📊 System status</div>
+    <div class="chip">🔔 Set a reminder</div>
+  </div>
+
+  <div class="chat-preview" id="chatPreview">
+    <div class="msg may">Hey~ What's up?</div>
+  </div>
+</div>
+
+<!-- Input -->
+<div class="input-container">
+  <input type="text" id="chatInput" placeholder="Message May..." />
+  <button class="send-btn" id="sendBtn">↑</button>
+</div>
+
+<script>
+  // Drawer toggle
+  const toggle = document.getElementById('drawerToggle');
+  const drawer = document.getElementById('sideDrawer');
+  const overlay = document.getElementById('overlay');
+
+  toggle.addEventListener('click', () => {
+    drawer.classList.toggle('open');
+    overlay.classList.toggle('open');
+  });
+
+  overlay.addEventListener('click', () => {
+    drawer.classList.remove('open');
+    overlay.classList.remove('open');
+  });
+
+  // Chat simulation
+  const input = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const chat = document.getElementById('chatPreview');
+
+  function addMessage(role, text, tool) {
+    const msg = document.createElement('div');
+    msg.className = `msg ${role}`;
+    msg.textContent = text;
+    if (tool) {
+      const tag = document.createElement('div');
+      tag.className = 'tool-tag';
+      tag.textContent = tool;
+      msg.appendChild(tag);
+    }
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function sendMessage() {
+    const text = input.value.trim();
+    if (!text) return;
+    addMessage('user', text);
+    input.value = '';
+
+    setTimeout(() => {
+      addMessage('may', "Done~ I'm on it!");
+    }, 800);
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendMessage();
+  });
+</script>
+
+</body>
+</html>

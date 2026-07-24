@@ -4,14 +4,51 @@ httpx>=0.27.0
 pydantic>=2.6.0
 aiofiles>=23.2.0
 # Phase 3: Voice
-# silero-vad>=4.1.0
-# faster-whisper>=1.0.0
+# silero-vad>=4.1.0  # Uses torch.hub — install torch separately
+faster-whisper>=1.0.0
 # piper-tts>=1.2.0
 # sounddevice>=0.4.6
 # Phase 4: System Control (Windows)
 psutil>=5.9.0
-# pycaw>=20230407
-# screen_brightness_control>=0.22.0
+pycaw>=20230407
+screen_brightness_control>=0.22.0
 # Phase 5: Memory
 lancedb>=0.6.0
 sentence-transformers>=2.5.0
+# Phase 13: Intelligence — Wake Word
+openwakeword>=0.6.0
+# Phase 14: Integrations — News (RSS)
+feedparser>=6.0.0
+# Phase 4: Screen Understanding
+imagehash>=4.3.1
+uiautomation>=2.0.18
+# P4 Tier 2 Option B: Lightweight OCR fallback
+# easyocr>=1.7.0  # Install separately: pip install easyocr (~500MB)
+# P5: Auto-tuner (no extra deps, uses stdlib)
+
+# ── Control Core (JARVIS_CONTROL_CORE_ARCHITECTURE) ──────────────────────────
+# Core Win32 API access
+pywin32>=306
+# Process management (also used by existing system/control.py)
+# UI Automation (Phase 2: L3_application, L4_window)
+pywinauto>=0.6.8
+# File system monitoring (Phase 2: L1_filesystem)
+watchdog>=4.0.0
+# WMI queries (Phase 2: L8_system)
+WMI>=1.5.1
+# Browser automation (Phase 2: L9_browser)
+playwright>=1.40.0
+# Archive support (Phase 2: L1_filesystem)
+py7zr>=0.20.0
+# Recycle bin operations (Phase 2: L1_filesystem)
+winshell>=0.3.0
+# COM interface definitions (Phase 2: various)
+comtypes>=1.4.0
+# Send to recycle bin (L1_filesystem)
+send2trash>=1.8.2
+# Image capture (L4_window, L5_input)
+Pillow>=10.0.0
+# Phase 21: Voice Biometrics
+resemblyzer>=0.1.3
+# Phase 21: Remote Control QR code
+qrcode[pil]>=7.4

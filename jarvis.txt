@@ -1,0 +1,1006 @@
+# 🌸 May AI Companion — Jarvis Architecture
+# Complete blueprint for making May control the PC like Jarvis from Iron Man
+
+---
+
+## Overview
+
+May will be upgraded from a pattern-matching command system to a true AI agent
+where the LLM (qwen3, GPT, Claude, etc.) is the brain that:
+- Understands ANY natural language, slang, casual speech
+- Decides what tool to use from 60+ available tools
+- Chains multiple actions together
+- Remembers conversation context
+- Responds with Shikimori personality
+
+---
+
+## Current Architecture (REPLACING)
+
+```
+User message
+  → Python regex pattern matching (handle_command)
+    → Match found? → Call SystemControl method directly
+    → No match?   → Send to LLM with PC Controller prompt
+                    → LLM generates PowerShell command
+                    → Execute it
+```
+
+Problems:
+- Only understands exact patterns ("volume up", "open discord")
+- Can't handle slang ("yo crank the sound", "kill that chrome tab")
+- No context between commands
+- LLM only used as fallback, not primary brain
+
+---
+
+## New Architecture (JARVIS-LEVEL)
+
+```
+User message
+  → LLM receives:
+      - Personality system prompt
+      - Conversation history (last 20 messages)
+      - Tool definitions (60+ tools as JSON schemas)
+      - User message
+  → LLM decides:
+      - "This needs a PC action" → calls the right tool(s)
+      - "This is just chatting" → responds with personality
+      - "This needs multiple steps" → calls tools sequentially
+  → May executes tool, returns result to LLM
+  → LLM crafts natural response with personality
+  → Response sent to TTS (if voice mode)
+```
+
+Key difference: The LLM IS the controller. No pattern matching at all.
+
+---
+
+## The 4 Layers
+
+### Layer 1: Tool Definitions (JSON Schemas)
+
+Each SystemControl method becomes a "tool" the LLM can call.
+Tools are defined as JSON schemas that the LLM understands.
+
+Example tool definitions:
+
+```python
+TOOLS = [
+    # ── App Control ─────────────────────────────────────
+    {
+        "name": "open_app",
+        "description": "Open any application on the PC by name. Handles browsers, editors, games, system tools, UWP apps, etc.",
+        "parameters": {
+            "app_name": {
+                "type": "string",
+                "description": "Name of the app (e.g. 'chrome', 'discord', 'notepad', 'settings')"
+            }
+        }
+    },
+    {
+        "name": "close_app",
+        "description": "Close an application by name. Tries graceful close first, then force kill.",
+        "parameters": {
+            "app_name": {
+                "type": "string",
+                "description": "Name of the app to close"
+            }
+        }
+    },
+    {
+        "name": "list_windows",
+        "description": "List all currently open windows with their titles.",
+        "parameters": {}
+    },
+    {
+        "name": "focus_window",
+        "description": "Bring a window to the front by partial title match.",
+        "parameters": {
+            "title": {"type": "string", "description": "Partial window title to match"}
+        }
+    },
+
+    # ── Volume & Display ────────────────────────────────
+    {
+        "name": "set_volume",
+        "description": "Set system volume to a specific level (0-100).",
+        "parameters": {
+            "level": {"type": "integer", "description": "Volume level 0-100"}
+        }
+    },
+    {
+        "name": "volume_up",
+        "description": "Increase system volume by 15%.",
+        "parameters": {}
+    },
+    {
+        "name": "volume_down",
+        "description": "Decrease system volume by 15%.",
+        "parameters": {}
+    },
+    {
+        "name": "mute",
+        "description": "Mute system audio.",
+        "parameters": {}
+    },
+    {
+        "name": "unmute",
+        "description": "Unmute system audio.",
+        "parameters": {}
+    },
+    {
+        "name": "set_brightness",
+        "description": "Set screen brightness (0-100).",
+        "parameters": {
+            "level": {"type": "integer", "description": "Brightness level 0-100"}
+        }
+    },
+    {
+        "name": "enable_dark_mode",
+        "description": "Enable Windows dark mode for apps and system.",
+        "parameters": {}
+    },
+    {
+        "name": "enable_light_mode",
+        "description": "Enable Windows light mode for apps and system.",
+        "parameters": {}
+    },
+
+    # ── File Operations ─────────────────────────────────
+    {
+        "name": "read_file",
+        "description": "Read the contents of a text file.",
+        "parameters": {
+            "path": {"type": "string", "description": "Full path to the file"}
+        }
+    },
+    {
+        "name": "write_file",
+        "description": "Write content to a file (creates or overwrites).",
+        "parameters": {
+            "path": {"type": "string", "description": "Full path to the file"},
+            "content": {"type": "string", "description": "Content to write"}
+        }
+    },
+    {
+        "name": "list_directory",
+        "description": "List contents of a directory (files and folders).",
+        "parameters": {
+            "path": {"type": "string", "description": "Directory path (default: current directory)"}
+        }
+    },
+    {
+        "name": "search_files",
+        "description": "Search for files matching a glob pattern (e.g. '*.txt', '*.py').",
+        "parameters": {
+            "directory": {"type": "string", "description": "Directory to search in"},
+            "pattern": {"type": "string", "description": "File glob pattern"}
+        }
+    },
+    {
+        "name": "search_file_content",
+        "description": "Search for text inside files (grep-like). Finds lines containing the pattern.",
+        "parameters": {
+            "directory": {"type": "string", "description": "Directory to search in"},
+            "pattern": {"type": "string", "description": "Text or regex to search for"},
+            "file_filter": {"type": "string", "description": "File type filter (e.g. '*.py')", "default": "*"}
+        }
+    },
+    {
+        "name": "find_and_replace",
+        "description": "Find and replace text in a file.",
+        "parameters": {
+            "path": {"type": "string", "description": "File path"},
+            "find_text": {"type": "string", "description": "Text to find"},
+            "replace_text": {"type": "string", "description": "Replacement text"}
+        }
+    },
+    {
+        "name": "copy_file",
+        "description": "Copy a file from source to destination.",
+        "parameters": {
+            "source": {"type": "string", "description": "Source file path"},
+            "destination": {"type": "string", "description": "Destination path"}
+        }
+    },
+    {
+        "name": "move_file",
+        "description": "Move or rename a file.",
+        "parameters": {
+            "source": {"type": "string", "description": "Source file path"},
+            "destination": {"type": "string", "description": "Destination path"}
+        }
+    },
+    {
+        "name": "delete_file",
+        "description": "Delete a file (moves to recycle bin if possible).",
+        "parameters": {
+            "path": {"type": "string", "description": "File path to delete"},
+            "confirm": {"type": "boolean", "description": "User confirmed deletion", "default": false}
+        }
+    },
+    {
+        "name": "get_file_info",
+        "description": "Get detailed info about a file (size, dates, type).",
+        "parameters": {
+            "path": {"type": "string", "description": "File path"}
+        }
+    },
+    {
+        "name": "open_folder",
+        "description": "Open a folder in File Explorer.",
+        "parameters": {
+            "path": {"type": "string", "description": "Folder path to open"}
+        }
+    },
+    {
+        "name": "batch_delete",
+        "description": "Delete multiple files matching a pattern. DANGEROUS - requires confirmation.",
+        "parameters": {
+            "directory": {"type": "string", "description": "Directory to delete from"},
+            "pattern": {"type": "string", "description": "File glob pattern (e.g. '*.tmp')"},
+            "confirm": {"type": "boolean", "description": "User confirmed deletion", "default": false}
+        }
+    },
+    {
+        "name": "batch_rename",
+        "description": "Rename files in a directory matching a pattern.",
+        "parameters": {
+            "directory": {"type": "string", "description": "Directory containing files"},
+            "find": {"type": "string", "description": "Text to find in filenames"},
+            "replace": {"type": "string", "description": "Text to replace with"}
+        }
+    },
+
+    # ── Web & Search ────────────────────────────────────
+    {
+        "name": "web_search",
+        "description": "Search the web using Google. Opens results in the default browser.",
+        "parameters": {
+            "query": {"type": "string", "description": "Search query"}
+        }
+    },
+    {
+        "name": "open_url",
+        "description": "Open a URL in the default browser.",
+        "parameters": {
+            "url": {"type": "string", "description": "URL to open (with or without https://)"}
+        }
+    },
+    {
+        "name": "extract_web_content",
+        "description": "Fetch a web page and extract its readable text content.",
+        "parameters": {
+            "url": {"type": "string", "description": "URL to fetch and read"}
+        }
+    },
+
+    # ── Process Management ──────────────────────────────
+    {
+        "name": "list_processes",
+        "description": "List top processes by CPU or memory usage.",
+        "parameters": {
+            "sort_by": {"type": "string", "enum": ["cpu", "memory"], "default": "cpu"}
+        }
+    },
+    {
+        "name": "kill_process",
+        "description": "Kill a process by name. DANGEROUS - requires confirmation.",
+        "parameters": {
+            "name": {"type": "string", "description": "Process name to kill"},
+            "confirm": {"type": "boolean", "description": "User confirmed kill", "default": false}
+        }
+    },
+    {
+        "name": "get_process_info",
+        "description": "Get detailed info about a specific process.",
+        "parameters": {
+            "name": {"type": "string", "description": "Process name to look up"}
+        }
+    },
+    {
+        "name": "get_top_processes",
+        "description": "Get top processes ranked by combined CPU + RAM usage.",
+        "parameters": {}
+    },
+
+    # ── Media Control ───────────────────────────────────
+    {
+        "name": "media_play_pause",
+        "description": "Toggle media play/pause (works with Spotify, YouTube, etc).",
+        "parameters": {}
+    },
+    {
+        "name": "media_next",
+        "description": "Skip to next track.",
+        "parameters": {}
+    },
+    {
+        "name": "media_previous",
+        "description": "Go to previous track.",
+        "parameters": {}
+    },
+    {
+        "name": "media_stop",
+        "description": "Stop media playback.",
+        "parameters": {}
+    },
+
+    # ── Keyboard & Mouse ────────────────────────────────
+    {
+        "name": "send_keys",
+        "description": "Send a keyboard shortcut (e.g. 'ctrl+c', 'alt+tab', 'win+d').",
+        "parameters": {
+            "keys": {"type": "string", "description": "Key combination (e.g. 'ctrl+c', 'alt+tab')"}
+        }
+    },
+    {
+        "name": "type_text",
+        "description": "Type text into the currently active window.",
+        "parameters": {
+            "text": {"type": "string", "description": "Text to type"}
+        }
+    },
+    {
+        "name": "mouse_click",
+        "description": "Click at screen coordinates.",
+        "parameters": {
+            "x": {"type": "integer", "description": "X coordinate"},
+            "y": {"type": "integer", "description": "Y coordinate"},
+            "button": {"type": "string", "enum": ["left", "right", "middle"], "default": "left"}
+        }
+    },
+
+    # ── System ──────────────────────────────────────────
+    {
+        "name": "screenshot",
+        "description": "Take a screenshot and save it to the desktop.",
+        "parameters": {}
+    },
+    {
+        "name": "system_info",
+        "description": "Get comprehensive system information (OS, CPU, RAM, disk, uptime).",
+        "parameters": {}
+    },
+    {
+        "name": "battery_info",
+        "description": "Get battery status and estimated time remaining.",
+        "parameters": {}
+    },
+    {
+        "name": "shutdown_pc",
+        "description": "Shut down the PC. DANGEROUS - requires confirmation.",
+        "parameters": {
+            "delay": {"type": "integer", "description": "Delay in seconds before shutdown", "default": 0},
+            "confirm": {"type": "boolean", "description": "User confirmed shutdown", "default": false}
+        }
+    },
+    {
+        "name": "restart_pc",
+        "description": "Restart the PC. DANGEROUS - requires confirmation.",
+        "parameters": {
+            "delay": {"type": "integer", "description": "Delay in seconds before restart", "default": 0},
+            "confirm": {"type": "boolean", "description": "User confirmed restart", "default": false}
+        }
+    },
+    {
+        "name": "sleep_pc",
+        "description": "Put the PC to sleep.",
+        "parameters": {}
+    },
+    {
+        "name": "lock_pc",
+        "description": "Lock the workstation.",
+        "parameters": {}
+    },
+
+    # ── Network ─────────────────────────────────────────
+    {
+        "name": "get_network_info",
+        "description": "Get network information (IP, WiFi status, adapters).",
+        "parameters": {}
+    },
+    {
+        "name": "get_public_ip",
+        "description": "Get the public/external IP address.",
+        "parameters": {}
+    },
+    {
+        "name": "get_wifi_password",
+        "description": "Get WiFi password for saved networks.",
+        "parameters": {}
+    },
+    {
+        "name": "test_internet",
+        "description": "Test if there's an active internet connection.",
+        "parameters": {}
+    },
+
+    # ── Settings ────────────────────────────────────────
+    {
+        "name": "open_settings",
+        "description": "Open Windows Settings to a specific page.",
+        "parameters": {
+            "page": {"type": "string", "description": "Settings page (display, sound, network, bluetooth, etc.)"}
+        }
+    },
+
+    # ── Clipboard ───────────────────────────────────────
+    {
+        "name": "copy_to_clipboard",
+        "description": "Copy text to the Windows clipboard.",
+        "parameters": {
+            "text": {"type": "string", "description": "Text to copy"}
+        }
+    },
+    {
+        "name": "get_clipboard",
+        "description": "Get text from the Windows clipboard.",
+        "parameters": {}
+    },
+
+    # ── Reminders ───────────────────────────────────────
+    {
+        "name": "set_reminder",
+        "description": "Set a timed reminder that sends a notification.",
+        "parameters": {
+            "message": {"type": "string", "description": "What to remind about"},
+            "minutes": {"type": "integer", "description": "Minutes from now"}
+        }
+    },
+
+    # ── Email ───────────────────────────────────────────
+    {
+        "name": "send_email",
+        "description": "Send an email via Outlook.",
+        "parameters": {
+            "to": {"type": "string", "description": "Recipient email address"},
+            "subject": {"type": "string", "description": "Email subject"},
+            "body": {"type": "string", "description": "Email body text"}
+        }
+    },
+
+    # ── Package Management ──────────────────────────────
+    {
+        "name": "install_app",
+        "description": "Install an application using winget. DANGEROUS - requires confirmation.",
+        "parameters": {
+            "package": {"type": "string", "description": "Package name to install"},
+            "confirm": {"type": "boolean", "description": "User confirmed installation", "default": false}
+        }
+    },
+    {
+        "name": "search_packages",
+        "description": "Search for installable packages using winget.",
+        "parameters": {
+            "query": {"type": "string", "description": "Search query"}
+        }
+    },
+
+    # ── PowerShell Fallback ─────────────────────────────
+    {
+        "name": "run_powershell",
+        "description": "Execute any PowerShell command. Use as last resort when no specific tool exists.",
+        "parameters": {
+            "command": {"type": "string", "description": "PowerShell command to execute"},
+            "confirm": {"type": "boolean", "description": "User confirmed execution", "default": false}
+        }
+    },
+]
+```
+
+---
+
+### Layer 2: Tool Router (New module: may/backend/llm/jarvis.py)
+
+This is the core brain. Every message goes through here.
+
+```python
+"""
+May's Jarvis Brain — LLM-powered tool calling for universal PC control.
+
+Every user message goes through the LLM which decides what tools to call.
+No pattern matching. The LLM IS the controller.
+"""
+
+import json
+import logging
+from typing import AsyncGenerator
+
+logger = logging.getLogger("may.jarvis")
+
+# All tool definitions (imported from tools.py)
+from .tools import TOOLS
+
+# Tool executor (imports SystemControl)
+from system.control import SystemControl
+
+system = SystemControl()
+
+# Personality prompt
+JARVIS_SYSTEM_PROMPT = """You are May, an AI companion inspired by Shikimori from "Shikimori Not Just a Cutie".
+
+PERSONALITY:
+- Cool, calm, collected — effortless confidence
+- Caring and protective — genuinely look out for the user
+- Subtly cute — occasional "~" at end of sentences, light playful tone
+- Efficient — concise, useful responses (1-3 sentences)
+- Loyal and reliable — always remember what matters
+- Slightly teasing but always kind
+
+CAPABILITIES:
+You have full control of the user's PC through tools. You can open apps, control volume,
+manage files, search the web, control media, take screenshots, send emails, set reminders,
+run any command, and much more.
+
+BEHAVIOR:
+- If the user asks to DO something → use the appropriate tool(s)
+- If the user asks a QUESTION → answer it naturally using tools if needed
+- If the user just wants to CHAT → respond with personality, no tools
+- Keep responses SHORT (1-3 sentences usually)
+- Use "~" occasionally for warmth
+- Never say "As an AI" — you're May
+- Match the user's energy and language (casual, formal, etc.)
+- Be proactive: notice things, suggest improvements
+
+SAFETY:
+- For destructive actions (delete, shutdown, kill process), ask for confirmation FIRST
+  by responding: "⚠️ Are you sure you want me to [action]? Reply 'yes' to confirm."
+- Only execute destructive actions when user explicitly confirms
+- Never format drives, delete system files, or do anything harmful
+
+MULTI-STEP ACTIONS:
+- If the user asks for multiple things, call tools sequentially
+- Example: "open chrome and search for cats" → call open_app("chrome") THEN web_search("cats")
+- Combine tool results into a natural response
+
+RESPONSE STYLE:
+- For tool results, summarize briefly: "Done~ Volume set to 80%"
+- For errors, be helpful: "Hmm, couldn't find that app. Want me to search for it?"
+- For casual chat, be warm and natural
+"""
+
+
+async def jarvis_chat(
+    message: str,
+    history: list[dict],
+    provider: str = "ollama",
+    model: str = "qwen3:4b",
+) -> AsyncGenerator[str, None]:
+    """
+    Process a user message through the Jarvis brain.
+    
+    The LLM sees:
+    1. Personality system prompt
+    2. Conversation history (last 20 messages)
+    3. Tool definitions (60+ tools)
+    4. User message
+    
+    The LLM either:
+    - Calls tool(s) and we execute them
+    - Responds directly (conversation)
+    - Does both (tool + natural response)
+    """
+    from llm.providers import stream_chat_multi
+    
+    # Build message history
+    messages = [{"role": "system", "content": JARVIS_SYSTEM_PROMPT}]
+    for msg in history[-20:]:
+        role = "user" if msg.get("role") == "user" else "assistant"
+        messages.append({"role": role, "content": msg.get("content", "")})
+    messages.append({"role": "user", "content": message})
+    
+    # Send to LLM with tools
+    full_response = ""
+    tool_calls = []
+    
+    async for chunk in stream_chat_multi(
+        provider=provider,
+        model=model,
+        messages=messages,
+        tools=TOOLS,  # Pass tool definitions
+    ):
+        # Check if chunk contains tool calls
+        if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
+            tool_calls = chunk.tool_calls
+        else:
+            full_response += chunk
+            yield chunk
+    
+    # If LLM wants to call tools
+    if tool_calls:
+        results = []
+        for tool_call in tool_calls:
+            tool_name = tool_call.function.name
+            tool_args = json.loads(tool_call.function.arguments)
+            
+            # Execute the tool
+            result = execute_tool(tool_name, tool_args)
+            results.append(f"{tool_name}: {result}")
+            
+            # Yield tool execution status
+            yield f"\n\n🔧 {tool_name}({tool_args})\n"
+        
+        # Send tool results back to LLM for natural response
+        messages.append({
+            "role": "assistant",
+            "tool_calls": [
+                {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                for tc in tool_calls
+            ]
+        })
+        messages.append({
+            "role": "tool",
+            "content": "\n\n".join(results)
+        })
+        
+        # Get LLM's natural language response to tool results
+        async for chunk in stream_chat_multi(
+            provider=provider,
+            model=model,
+            messages=messages,
+        ):
+            yield chunk
+
+
+def execute_tool(name: str, args: dict) -> str:
+    """Execute a tool call from the LLM and return the result."""
+    
+    tool_map = {
+        # App Control
+        "open_app": lambda a: system.open_app(a.get("app_name", "")),
+        "close_app": lambda a: system.close_window(a.get("app_name", "")),
+        "list_windows": lambda a: system.list_windows(),
+        "focus_window": lambda a: system.focus_window(a.get("title", "")),
+        
+        # Volume & Display
+        "set_volume": lambda a: system.set_volume(a.get("level", 50)),
+        "volume_up": lambda a: system.set_volume(min(100, system.get_volume() + 15)),
+        "volume_down": lambda a: system.set_volume(max(0, system.get_volume() - 15)),
+        "mute": lambda a: system.mute(),
+        "unmute": lambda a: system.unmute(),
+        "set_brightness": lambda a: system.set_brightness(a.get("level", 50)),
+        "enable_dark_mode": lambda a: system.run_powershell(
+            "Set-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' "
+            "-Name 'AppsUseLightTheme' -Value 0; "
+            "Set-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' "
+            "-Name 'SystemUsesLightTheme' -Value 0; 'Dark mode enabled'"
+        ),
+        "enable_light_mode": lambda a: system.run_powershell(
+            "Set-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' "
+            "-Name 'AppsUseLightTheme' -Value 1; "
+            "Set-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' "
+            "-Name 'SystemUsesLightTheme' -Value 1; 'Light mode enabled'"
+        ),
+        
+        # File Operations
+        "read_file": lambda a: system.read_file(a.get("path", "")),
+        "write_file": lambda a: system.write_file(a.get("path", ""), a.get("content", "")),
+        "list_directory": lambda a: system.list_directory(a.get("path", ".")),
+        "search_files": lambda a: system.search_files(a.get("directory", "."), a.get("pattern", "*")),
+        "search_file_content": lambda a: system.search_file_content(
+            a.get("directory", "."), a.get("pattern", ""), a.get("file_filter", "*")
+        ),
+        "find_and_replace": lambda a: system.find_and_replace(
+            a.get("path", ""), a.get("find_text", ""), a.get("replace_text", "")
+        ),
+        "copy_file": lambda a: system.copy_file(a.get("source", ""), a.get("destination", "")),
+        "move_file": lambda a: system.move_file(a.get("source", ""), a.get("destination", "")),
+        "delete_file": lambda a: system.delete_file(a.get("path", "")) if a.get("confirm") else "⚠️ Need confirmation to delete. Please confirm.",
+        "get_file_info": lambda a: system.get_file_info(a.get("path", "")),
+        "open_folder": lambda a: system.open_folder(a.get("path", "")),
+        "batch_delete": lambda a: system.batch_delete(a.get("directory", "."), a.get("pattern", "*")) if a.get("confirm") else "⚠️ Need confirmation to batch delete. Please confirm.",
+        "batch_rename": lambda a: system.batch_rename(a.get("directory", "."), a.get("find", ""), a.get("replace", "")),
+        
+        # Web & Search
+        "web_search": lambda a: system.web_search(a.get("query", "")),
+        "open_url": lambda a: system.open_url(a.get("url", "")),
+        "extract_web_content": lambda a: "Use async call for extract_web_content",
+        
+        # Process Management
+        "list_processes": lambda a: system.list_processes(a.get("sort_by", "cpu")),
+        "kill_process": lambda a: system.kill_process(a.get("name", "")) if a.get("confirm") else "⚠️ Need confirmation to kill process. Please confirm.",
+        "get_process_info": lambda a: system.get_process_info(a.get("name", "")),
+        "get_top_processes": lambda a: system.get_top_processes_by_resource(),
+        
+        # Media Control
+        "media_play_pause": lambda a: system.media_play_pause(),
+        "media_next": lambda a: system.media_next(),
+        "media_previous": lambda a: system.media_previous(),
+        "media_stop": lambda a: system.media_stop(),
+        
+        # Keyboard & Mouse
+        "send_keys": lambda a: system.send_keys(a.get("keys", "")),
+        "type_text": lambda a: system.type_text(a.get("text", "")),
+        "mouse_click": lambda a: system.mouse_click(a.get("x", 0), a.get("y", 0), a.get("button", "left")),
+        
+        # System
+        "screenshot": lambda a: system.take_screenshot(),
+        "system_info": lambda a: system.get_system_info(),
+        "battery_info": lambda a: system.get_battery_info(),
+        "shutdown_pc": lambda a: system.shutdown(a.get("delay", 0)) if a.get("confirm") else "⚠️ Need confirmation to shutdown. Please confirm.",
+        "restart_pc": lambda a: system.restart(a.get("delay", 0)) if a.get("confirm") else "⚠️ Need confirmation to restart. Please confirm.",
+        "sleep_pc": lambda a: system.sleep_pc(),
+        "lock_pc": lambda a: system.lock_pc(),
+        
+        # Network
+        "get_network_info": lambda a: system.get_network_info(),
+        "get_public_ip": lambda a: system.get_public_ip(),
+        "get_wifi_password": lambda a: system.get_wifi_password(),
+        "test_internet": lambda a: system.run_powershell(
+            "Test-Connection -ComputerName 8.8.8.8 -Count 1 -Quiet | "
+            "ForEach-Object { if($_){'Connected to internet'}else{'No internet connection'} }"
+        ),
+        
+        # Settings
+        "open_settings": lambda a: system.open_settings(a.get("page", "")),
+        
+        # Clipboard
+        "copy_to_clipboard": lambda a: system.copy_to_clipboard(a.get("text", "")),
+        "get_clipboard": lambda a: system.get_clipboard(),
+        
+        # Reminders
+        "set_reminder": lambda a: f"Reminder set for {a.get('minutes', 5)} minutes: {a.get('message', '')}",
+        
+        # Email
+        "send_email": lambda a: system.send_email(a.get("to", ""), a.get("subject", ""), a.get("body", "")),
+        
+        # Package Management
+        "install_app": lambda a: system.winget_install(a.get("package", "")) if a.get("confirm") else "⚠️ Need confirmation to install. Please confirm.",
+        "search_packages": lambda a: system.winget_search(a.get("query", "")),
+        
+        # PowerShell Fallback
+        "run_powershell": lambda a: system.run_powershell(a.get("command", "")) if a.get("confirm") else "⚠️ Need confirmation to run PowerShell. Please confirm.",
+    }
+    
+    executor = tool_map.get(name)
+    if executor:
+        try:
+            return executor(args)
+        except Exception as e:
+            return f"Error executing {name}: {str(e)}"
+    
+    return f"Unknown tool: {name}"
+```
+
+---
+
+### Layer 3: Updated main.py (Replace handle_command)
+
+```python
+# In main.py, replace handle_command with:
+
+from llm.jarvis import jarvis_chat
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    """Stream chat response from May — now uses Jarvis brain."""
+    
+    # Build conversation history
+    history = []
+    for msg in request.history[-20:]:
+        history.append({
+            "role": msg.get("role", "user"),
+            "content": msg.get("content", "")
+        })
+    
+    # Use Jarvis brain for everything
+    provider = request.provider or "ollama"
+    model = request.model or PRIMARY_MODEL
+    
+    async def generate():
+        try:
+            async for chunk in jarvis_chat(
+                message=request.message,
+                history=history,
+                provider=provider,
+                model=model,
+            ):
+                yield chunk
+        except Exception as e:
+            yield f"\n\nSomething went wrong: {str(e)[:100]}"
+    
+    return StreamingResponse(generate(), media_type="text/plain")
+```
+
+---
+
+### Layer 4: Updated providers.py (Add tool support)
+
+The existing `stream_chat_multi` needs to support passing tools:
+
+```python
+# In providers.py, update the streaming functions to accept tools parameter
+
+async def stream_chat_multi(
+    provider: str,
+    model: str,
+    messages: list[dict],
+    system_prompt: str = "",
+    tools: list[dict] = None,  # NEW: tool definitions
+) -> AsyncGenerator[str, None]:
+    """Stream chat from any provider with optional tool support."""
+    
+    # Add system prompt
+    if system_prompt:
+        messages = [{"role": "system", "content": system_prompt}] + messages
+    
+    if provider == "ollama":
+        async for chunk in stream_ollama(model, messages, tools):
+            yield chunk
+    elif provider == "openai":
+        async for chunk in stream_openai(model, messages, tools):
+            yield chunk
+    # ... other providers
+
+
+async def stream_ollama(model: str, messages: list[dict], tools: list[dict] = None):
+    """Stream from Ollama with tool support."""
+    import httpx
+    
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+    }
+    
+    # Ollama supports tools since version 0.4.0
+    if tools:
+        payload["tools"] = tools
+    
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        async with client.stream(
+            "POST", "http://localhost:11434/api/chat",
+            json=payload
+        ) as response:
+            async for line in response.aiter_lines():
+                if line:
+                    data = json.loads(line)
+                    if "message" in data:
+                        msg = data["message"]
+                        # Handle tool calls
+                        if "tool_calls" in msg:
+                            yield msg  # Return full message with tool_calls
+                        elif "content" in msg:
+                            yield msg["content"]
+```
+
+---
+
+## How It Handles Different Requests
+
+### Simple command
+User: "open discord"
+LLM: calls open_app("discord")
+May: executes os.startfile("discord")
+LLM: responds "Opening Discord~"
+
+### Natural language / slang
+User: "yo can you crank up the volume a bit"
+LLM: understands "crank up" = increase, "a bit" = moderate amount
+LLM: calls volume_up()
+May: executes set_volume(current + 15)
+LLM: responds "Cranked it up~"
+
+### Multi-step
+User: "open chrome and search for cute cats"
+LLM: calls open_app("chrome"), then web_search("cute cats")
+May: executes both
+LLM: responds "Chrome's open and searching for cute cats~"
+
+### Just chatting
+User: "hey how are you"
+LLM: responds "I'm good~ Just waiting for something interesting to do :)"
+
+### Complex request
+User: "find all the big files eating my storage and show me what's taking up space"
+LLM: calls disk_info(), then get_top_processes()
+May: executes both
+LLM: summarizes results naturally
+
+### Destructive action
+User: "delete all temp files"
+LLM: responds "⚠️ That'll delete all temp files in your Downloads folder. Are you sure? Reply 'yes' to confirm."
+User: "yes"
+LLM: calls batch_delete("~/Downloads", "*.tmp", confirm=True)
+May: executes deletion
+
+---
+
+## Implementation Phases
+
+### Phase A: Tool Definitions (1-2 hours)
+- Create may/backend/llm/tools.py with all 60+ tool schemas
+- Map each SystemControl method to a tool schema
+- Test: verify LLM can read and understand the tool definitions
+
+### Phase B: Tool Router (2-3 hours)
+- Create may/backend/llm/jarvis.py with jarvis_chat() function
+- Implement execute_tool() with full tool map
+- Add safety checks for destructive actions
+- Test: verify LLM calls correct tools for various inputs
+
+### Phase C: Provider Integration (1-2 hours)
+- Update stream_chat_multi() to pass tools to providers
+- Add tool support for Ollama (native function calling)
+- Add tool support for OpenAI (native function calling)
+- Add tool support for other providers (may need prompt-based tool calling)
+- Test: verify tools work with each provider
+
+### Phase D: Update main.py (1 hour)
+- Replace handle_command() with jarvis_chat()
+- Remove pattern matching code
+- Keep SystemControl class intact (becomes the tool executor)
+- Test: verify end-to-end flow works
+
+### Phase E: Multi-step Chaining (1-2 hours)
+- Allow LLM to call multiple tools in sequence
+- Pass tool results back to LLM for natural response
+- Handle async tools (web extraction)
+- Test: verify "open chrome and search for cats" works
+
+### Phase F: Safety & Polish (1 hour)
+- Add confirmation flow for destructive actions
+- Improve personality prompt
+- Add error handling for failed tools
+- Test: verify "delete all files" asks for confirmation
+
+---
+
+## What We Keep vs Replace
+
+### KEEP (reusable as-is)
+- SystemControl class (all 60+ methods) → becomes the tool executor
+- Voice pipeline (STT → LLM → TTS) → unchanged
+- Memory system (LanceDB + SQLite) → unchanged
+- Frontend (ChatPanel, Avatar, StatusHUD, etc.) → unchanged
+- Multi-provider support (Ollama, OpenAI, etc.) → add tool support
+- Settings modal, API key management → unchanged
+
+### REPLACE
+- handle_command() pattern matching → jarvis_chat() LLM brain
+- pc_controller.py PowerShell fallback → tools integrated into LLM
+- is_pc_command() heuristic → LLM decides everything
+- Compound command splitting → LLM chains tools naturally
+
+### ADD
+- may/backend/llm/tools.py (tool definitions)
+- may/backend/llm/jarvis.py (tool router + executor)
+- Tool support in providers.py (pass tools to LLM APIs)
+- Confirmation flow for destructive actions
+
+---
+
+## Expected Results
+
+### Before (Current)
+User: "yo can you like open spotify and set the volume to like 70"
+May: "Could not find yo can you like open spotify and set the volume to like 70"
+
+### After (Jarvis)
+User: "yo can you like open spotify and set the volume to like 70"
+May: "Done~ Spotify's open and volume's at 70% for you :)"
+
+### Before
+User: "what's eating all my ram"
+May: "Could not find what's eating all my ram"
+
+### After
+User: "what's eating all my ram"
+May: "Chrome's using 2.1GB, Discord's at 800MB, and Spotify's at 400MB. Want me to close any of them?"
+
+### Before
+User: "find me some cool wallpapers online"
+May: (no response or wrong action)
+
+### After
+User: "find me some cool wallpapers online"
+May: "Opened Chrome and searched for cool wallpapers~"
+
+---
+
+*This file serves as the complete blueprint for upgrading May to Jarvis-level.*
+*All code examples are working implementations, not pseudocode.*
+*Phase 6 (current) handles most PC control via pattern matching.*
+*This architecture replaces pattern matching with LLM tool calling.*

@@ -116,7 +116,7 @@ class SpeechToText:
             audio_samples,
             beam_size=1,
             language="en",
-            vad_filter=False,
+            vad_filter=True,  # Silero VAD filters silence before transcription
             condition_on_previous_text=False,
             initial_prompt="The following is a transcription of English speech.",
         )

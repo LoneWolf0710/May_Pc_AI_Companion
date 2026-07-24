@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>May — Glassmorphism 2.0 Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --glass-bg: rgba(255,255,255,0.03);
+    --glass-border: rgba(255,255,255,0.06);
+    --glass-highlight: rgba(255,255,255,0.08);
+    --accent: #60a5fa;
+    --accent-glow: rgba(96,165,250,0.15);
+    --purple: #a78bfa;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --bg: #08080c;
+    --surface: #111115;
+    --text: #f0f0f5;
+    --text-2: #9090a8;
+    --text-3: #55556a;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Mesh gradient background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background:
+      radial-gradient(ellipse at 20% 30%, rgba(96,165,250,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 70%, rgba(167,139,250,0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(52,211,153,0.03) 0%, transparent 50%);
+    animation: meshMove 20s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes meshMove {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    33% { transform: translate(-2%, 1%) rotate(1deg); }
+    66% { transform: translate(1%, -1%) rotate(-0.5deg); }
+  }
+
+  /* ── Layout ── */
+  .app {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    height: 100vh;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Sidebar — Icon rail ── */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    gap: 4px;
+    background: var(--glass-bg);
+    border-right: 1px solid var(--glass-border);
+    backdrop-filter: blur(40px);
+  }
+
+  .sidebar-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--text-3);
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .sidebar-icon:hover {
+    background: var(--glass-highlight);
+    color: var(--text-2);
+  }
+
+  .sidebar-icon.active {
+    background: var(--accent-glow);
+    color: var(--accent);
+  }
+
+  .sidebar-icon.active::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    width: 3px;
+    height: 20px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .sidebar-spacer { flex: 1; }
+
+  .sidebar-divider {
+    width: 28px;
+    height: 1px;
+    background: var(--glass-border);
+    margin: 4px 0;
+  }
+
+  /* ── Main area ── */
+  .main {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: relative;
+  }
+
+  /* ── Top header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--glass-border);
+    backdrop-filter: blur(20px);
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+
+  .header-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .header-subtitle {
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .header-stat {
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: 'JetBrains Mono', monospace;
+    padding: 4px 10px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+  }
+
+  .header-stat .dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  /* ── Content area ── */
+  .content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    overflow: hidden;
+  }
+
+  /* ── Chat column ── */
+  .chat-col {
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    overflow: hidden;
+  }
+
+  /* ── Avatar section — Large, centered ── */
+  .avatar-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 0 24px;
+    flex-shrink: 0;
+  }
+
+  .avatar-glass {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(40px);
+    box-shadow:
+      0 8px 32px rgba(0,0,0,0.3),
+      inset 0 1px 0 var(--glass-highlight),
+      0 0 60px var(--accent-glow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    animation: avatarBreathe 4s ease-in-out infinite;
+  }
+
+  .avatar-glass::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 15%;
+    width: 50%;
+    height: 30%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.08), transparent);
+    border-radius: 50%;
+    transform: rotate(-10deg);
+  }
+
+  /* Inner glow */
+  .avatar-glass .inner-glow {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, var(--accent), var(--purple) 60%, transparent 80%);
+    opacity: 0.6;
+    animation: innerPulse 3s ease-in-out infinite;
+  }
+
+  @keyframes avatarBreathe {
+    0%, 100% { box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 var(--glass-highlight), 0 0 40px var(--accent-glow); }
+    50% { box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 var(--glass-highlight), 0 0 80px var(--accent-glow); }
+  }
+
+  @keyframes innerPulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+
+  .avatar-name {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 6px;
+    margin-top: 20px;
+    color: var(--text);
+  }
+
+  .avatar-state {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── Messages ── */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 8px;
+  }
+
+  .bubble {
+    max-width: 75%;
+    padding: 14px 20px;
+    border-radius: 18px;
+    font-size: 14px;
+    line-height: 1.6;
+    animation: bubbleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    backdrop-filter: blur(20px);
+  }
+
+  .bubble.user {
+    align-self: flex-end;
+    background: rgba(96,165,250,0.1);
+    border: 1px solid rgba(96,165,250,0.12);
+    border-bottom-right-radius: 4px;
+  }
+
+  .bubble.may {
+    align-self: flex-start;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .bubble .tool-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 4px 10px;
+    background: rgba(52,211,153,0.08);
+    border: 1px solid rgba(52,211,153,0.15);
+    border-radius: 8px;
+    font-size: 11px;
+    color: var(--green);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  @keyframes bubbleIn {
+    from { opacity: 0; transform: translateY(12px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* ── Right panel — Info cards ── */
+  .info-panel {
+    border-left: 1px solid var(--glass-border);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .info-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 16px;
+    backdrop-filter: blur(20px);
+    transition: border-color 0.2s;
+  }
+
+  .info-card:hover {
+    border-color: var(--glass-highlight);
+  }
+
+  .info-card .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .info-card .card-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-3);
+  }
+
+  .info-card .card-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .badge-live {
+    background: rgba(52,211,153,0.1);
+    color: var(--green);
+  }
+
+  .badge-idle {
+    background: rgba(251,191,36,0.1);
+    color: var(--amber);
+  }
+
+  /* Hormone rows */
+  .h-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .h-row .h-name {
+    font-size: 10px;
+    color: var(--text-3);
+    width: 68px;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+  }
+
+  .h-row .h-track {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .h-row .h-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Memory list */
+  .mem-item {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--glass-border);
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.4;
+  }
+
+  .mem-item:last-child { border-bottom: none; }
+
+  .mem-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+
+  /* Brain regions */
+  .region-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 12px;
+  }
+
+  .region-row .r-name { color: var(--text-2); }
+  .region-row .r-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .r-active { background: rgba(96,165,250,0.1); color: var(--accent); }
+  .r-idle { background: rgba(255,255,255,0.03); color: var(--text-3); }
+
+  /* ── Input area ── */
+  .input-area {
+    padding: 16px 24px 24px;
+    flex-shrink: 0;
+  }
+
+  .input-glass {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 8px 8px 20px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    backdrop-filter: blur(40px);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .input-glass:focus-within {
+    border-color: rgba(96,165,250,0.3);
+    box-shadow: 0 0 30px rgba(96,165,250,0.05);
+  }
+
+  .input-glass input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .input-glass input::placeholder { color: var(--text-3); }
+
+  .btn-mic, .btn-send {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    color: var(--text-3);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .btn-send {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .btn-mic:hover, .btn-send:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-icon active" title="Chat">💬</div>
+    <div class="sidebar-icon" title="Voice">🎤</div>
+    <div class="sidebar-icon" title="Memory">🧠</div>
+    <div class="sidebar-icon" title="Screen">👁</div>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-icon" title="Meeting">🎙</div>
+    <div class="sidebar-icon" title="Ghost">👻</div>
+    <div class="sidebar-icon" title="Remote">📱</div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-icon" title="Settings">⚙</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="header-avatar"></div>
+        <div>
+          <div class="header-title">May</div>
+          <div class="header-subtitle">phi4-mini 3.8B · LOCAL</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="header-stat"><span class="dot" style="background:var(--green)"></span> Connected</div>
+        <div class="header-stat">GPU 58%</div>
+        <div class="header-stat">4.2 GB</div>
+        <div class="header-stat">ASK_BEFORE</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- Chat -->
+      <div class="chat-col">
+        <div class="avatar-section">
+          <div class="avatar-glass">
+            <div class="inner-glow"></div>
+          </div>
+          <div class="avatar-name">MAY</div>
+          <div class="avatar-state">Ready</div>
+        </div>
+
+        <div class="messages" id="messages">
+          <div class="bubble may">Hey~ What's up? I'm here whenever you need me.</div>
+          <div class="bubble user">Open Chrome and search for AI news</div>
+          <div class="bubble may">
+            Done~ Chrome's open and I found some AI news for you.
+            <div class="tool-badge">✓ open_app · web_search · 1.2s</div>
+          </div>
+          <div class="bubble user">What time is it?</div>
+          <div class="bubble may">It's 3:47 PM on a Sunday~ Don't forget to take a break soon!</div>
+        </div>
+
+        <div class="input-area">
+          <div class="input-glass">
+            <input type="text" id="chatInput" placeholder="Message May..." />
+            <button class="btn-mic">🎤</button>
+            <button class="btn-send" id="sendBtn">↑</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info Panel -->
+      <div class="info-panel">
+
+        <!-- Endocrine -->
+        <div class="info-card">
+          <div class="card-header">
+            <span class="card-label">Endocrine</span>
+            <span class="card-badge badge-live">LIVE</span>
+          </div>
+          <div class="h-row"><span class="h-name">cortisol</span><div class="h-track"><div class="h-fill" style="width:25%;background:var(--red)"></div></div></div>
+          <div class="h-row"><span class="h-name">dopamine</span><div class="h-track"><div class="h-fill" style="width:65%;background:var(--green)"></div></div></div>
+          <div class="h-row"><span class="h-name">serotonin</span><div class="h-track"><div class="h-fill" style="width:70%;background:var(--amber)"></div></div></div>
+          <div class="h-row"><span class="h-name">adrenaline</span><div class="h-track"><div class="h-fill" style="width:15%;background:#f97316"></div></div></div>
+          <div class="h-row"><span class="h-name">oxytocin</span><div class="h-track"><div class="h-fill" style="width:45%;background:#ec4899"></div></div></div>
+          <div class="h-row"><span class="h-name">endorphin</span><div class="h-track"><div class="h-fill" style="width:35%;background:var(--purple)"></div></div></div>
+        </div>
+
+        <!-- Brain -->
+        <div class="info-card">
+          <div class="card-header">
+            <span class="card-label">Brain Regions</span>
+          </div>
+          <div class="region-row"><span class="r-name">Thalamus</span><span class="r-status r-active">ACTIVE</span></div>
+          <div class="region-row"><span class="r-name">Prefrontal</span><span class="r-status r-idle">IDLE</span></div>
+          <div class="region-row"><span class="r-name">Hippocampus</span><span class="r-status r-active">READY</span></div>
+          <div class="region-row"><span class="r-name">Cerebellum</span><span class="r-status r-active">269+</span></div>
+          <div class="region-row"><span class="r-name">Amygdala</span><span class="r-status r-idle">CALM</span></div>
+        </div>
+
+        <!-- Sleep -->
+        <div class="info-card">
+          <div class="card-header">
+            <span class="card-label">Sleep Cycle</span>
+            <span class="card-badge badge-idle">WAKE</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-3)">Idle: 0s · Background consolidation active</div>
+        </div>
+
+        <!-- Memory -->
+        <div class="info-card">
+          <div class="card-header">
+            <span class="card-label">Memory</span>
+            <span class="card-badge badge-live">23</span>
+          </div>
+          <div class="mem-item">
+            <div class="mem-dot" style="background:var(--accent)"></div>
+            <div>Opened Chrome, searched AI news — 2m ago</div>
+          </div>
+          <div class="mem-item">
+            <div class="mem-dot" style="background:var(--purple)"></div>
+            <div>Prefers VS Code for coding</div>
+          </div>
+          <div class="mem-item">
+            <div class="mem-dot" style="background:var(--green)"></div>
+            <div>Morning routine: Chrome → email → weather</div>
+          </div>
+        </div>
+
+        <!-- Screen -->
+        <div class="info-card">
+          <div class="card-header">
+            <span class="card-label">Screen</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-2)">Chrome — "AI News - Google"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Chat
+  const input = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const messages = document.getElementById('messages');
+
+  function addMessage(role, text, tool) {
+    const bubble = document.createElement('div');
+    bubble.className = `bubble ${role}`;
+    bubble.textContent = text;
+    if (tool) {
+      const badge = document.createElement('div');
+      badge.className = 'tool-badge';
+      badge.textContent = tool;
+      bubble.appendChild(badge);
+    }
+    messages.appendChild(bubble);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function sendMessage() {
+    const text = input.value.trim();
+    if (!text) return;
+    addMessage('user', text);
+    input.value = '';
+    setTimeout(() => addMessage('may', "Done~ I'm on it!"), 800);
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+
+  // Animate hormones
+  setInterval(() => {
+    document.querySelectorAll('.h-fill').forEach(fill => {
+      const current = parseFloat(fill.style.width);
+      const delta = (Math.random() - 0.5) * 5;
+      fill.style.width = Math.max(5, Math.min(95, current + delta)) + '%';
+    });
+  }, 2500);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>May — Holographic HUD Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --cyan: #00f0ff;
+    --cyan-dim: #00f0ff33;
+    --cyan-glow: #00f0ff66;
+    --purple: #a855f7;
+    --purple-dim: #a855f733;
+    --blue: #3b82f6;
+    --bg: #050510;
+    --surface: #0a0a1a;
+    --text: #e0f0ff;
+    --text-dim: #6080a0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Animated grid background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      linear-gradient(90deg, var(--cyan-dim) 1px, transparent 1px),
+      linear-gradient(0deg, var(--cyan-dim) 1px, transparent 1px);
+    background-size: 60px 60px;
+    opacity: 0.15;
+    animation: gridScroll 20s linear infinite;
+  }
+
+  @keyframes gridScroll {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(60px, 60px); }
+  }
+
+  /* ── Radial pulse behind avatar ── */
+  .radial-pulse {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--cyan-dim) 0%, transparent 70%);
+    animation: pulse 3s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.3; }
+    50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.6; }
+  }
+
+  /* ── Layout ── */
+  .hud-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    grid-template-rows: 60px 1fr 80px;
+    height: 100vh;
+    gap: 2px;
+    padding: 8px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Top bar ── */
+  .top-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    background: linear-gradient(180deg, rgba(0,240,255,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--cyan-dim);
+  }
+
+  .top-bar .logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--cyan);
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px var(--cyan-glow);
+  }
+
+  .top-bar .status {
+    display: flex;
+    gap: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 8px #4ade80;
+    animation: blink 2s ease-in-out infinite;
+    display: inline-block;
+    margin-right: 6px;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── Left panel — Brain Regions ── */
+  .left-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+  }
+
+  .brain-region {
+    background: rgba(0,240,255,0.03);
+    border: 1px solid var(--cyan-dim);
+    border-radius: 8px;
+    padding: 12px 16px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+
+  .brain-region:hover {
+    background: rgba(0,240,255,0.08);
+    border-color: var(--cyan);
+    box-shadow: 0 0 20px var(--cyan-dim);
+  }
+
+  .brain-region.active {
+    border-color: var(--cyan);
+    background: rgba(0,240,255,0.1);
+    box-shadow: inset 0 0 30px var(--cyan-dim);
+  }
+
+  .brain-region .region-name {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .brain-region .region-model {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .brain-region .region-bar {
+    height: 2px;
+    background: var(--cyan-dim);
+    border-radius: 1px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+
+  .brain-region .region-bar .fill {
+    height: 100%;
+    background: var(--cyan);
+    border-radius: 1px;
+    box-shadow: 0 0 8px var(--cyan);
+    transition: width 1s ease;
+  }
+
+  /* ── Center — Avatar + Chat ── */
+  .center-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  .avatar-container {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin-top: 40px;
+  }
+
+  /* Rotating ring */
+  .avatar-ring {
+    position: absolute;
+    inset: -20px;
+    border: 1px solid var(--cyan-dim);
+    border-radius: 50%;
+    animation: rotate 10s linear infinite;
+  }
+
+  .avatar-ring::before {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    background: var(--cyan);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--cyan);
+  }
+
+  .avatar-ring-2 {
+    position: absolute;
+    inset: -35px;
+    border: 1px dashed var(--purple-dim);
+    border-radius: 50%;
+    animation: rotate 15s linear infinite reverse;
+  }
+
+  @keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Avatar orb */
+  .avatar-orb {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(0,240,255,0.4), transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(168,85,247,0.3), transparent 50%),
+      radial-gradient(circle at 50% 50%, #0a1628, #050510);
+    box-shadow:
+      0 0 60px var(--cyan-dim),
+      0 0 120px rgba(0,240,255,0.1),
+      inset 0 0 60px rgba(0,240,255,0.1);
+    animation: orbBreathe 4s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .avatar-orb::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 25%, rgba(255,255,255,0.15), transparent 40%);
+  }
+
+  @keyframes orbBreathe {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 60px var(--cyan-dim), 0 0 120px rgba(0,240,255,0.1); }
+    50% { transform: scale(1.03); box-shadow: 0 0 80px var(--cyan-glow), 0 0 160px rgba(0,240,255,0.15); }
+  }
+
+  .avatar-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    letter-spacing: 6px;
+    color: var(--cyan);
+    text-align: center;
+    margin-top: 20px;
+    text-shadow: 0 0 20px var(--cyan-glow);
+  }
+
+  .avatar-state {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 2px;
+  }
+
+  /* ── Chat area ── */
+  .chat-area {
+    flex: 1;
+    width: 100%;
+    max-width: 600px;
+    margin-top: 20px;
+    padding: 0 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .chat-bubble {
+    max-width: 80%;
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    animation: fadeInUp 0.4s ease;
+  }
+
+  .chat-bubble.user {
+    align-self: flex-end;
+    background: rgba(0,240,255,0.1);
+    border: 1px solid var(--cyan-dim);
+    color: var(--text);
+  }
+
+  .chat-bubble.may {
+    align-self: flex-start;
+    background: rgba(168,85,247,0.08);
+    border: 1px solid var(--purple-dim);
+    color: var(--text);
+  }
+
+  .chat-bubble .tool-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--cyan);
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Right panel — Endocrine + Status ── */
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+  }
+
+  .status-card {
+    background: rgba(0,240,255,0.03);
+    border: 1px solid var(--cyan-dim);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .status-card .card-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .hormone-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .hormone-bar .label {
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 80px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .hormone-bar .bar {
+    flex: 1;
+    height: 4px;
+    background: var(--cyan-dim);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .hormone-bar .bar .fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s ease;
+  }
+
+  .hormone-bar .bar .fill.cortisol { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+  .hormone-bar .bar .fill.dopamine { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+  .hormone-bar .bar .fill.serotonin { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+  .hormone-bar .bar .fill.adrenaline { background: #f97316; box-shadow: 0 0 6px #f97316; }
+  .hormone-bar .bar .fill.oxytocin { background: #ec4899; box-shadow: 0 0 6px #ec4899; }
+  .hormone-bar .bar .fill.endorphin { background: #8b5cf6; box-shadow: 0 0 6px #8b5cf6; }
+
+  .hormone-bar .value {
+    font-size: 10px;
+    color: var(--text-dim);
+    width: 30px;
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Memory cards */
+  .memory-item {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--cyan-dim);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .memory-item:last-child { border-bottom: none; }
+
+  .memory-item .mem-type {
+    font-family: 'Orbitron', monospace;
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: var(--cyan);
+    text-transform: uppercase;
+  }
+
+  /* ── Bottom bar — Input ── */
+  .bottom-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+    background: rgba(0,240,255,0.03);
+    border-top: 1px solid var(--cyan-dim);
+    border-radius: 12px;
+  }
+
+  .input-field {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--cyan-dim);
+    border-radius: 8px;
+    padding: 14px 20px;
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.3s;
+  }
+
+  .input-field:focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 20px var(--cyan-dim);
+  }
+
+  .input-field::placeholder {
+    color: var(--text-dim);
+  }
+
+  .mic-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 1px solid var(--cyan);
+    background: rgba(0,240,255,0.1);
+    color: var(--cyan);
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mic-btn:hover {
+    background: rgba(0,240,255,0.2);
+    box-shadow: 0 0 30px var(--cyan-dim);
+  }
+
+  .mic-btn.listening {
+    background: var(--cyan);
+    color: var(--bg);
+    animation: micPulse 1s ease-in-out infinite;
+  }
+
+  @keyframes micPulse {
+    0%, 100% { box-shadow: 0 0 20px var(--cyan-dim); }
+    50% { box-shadow: 0 0 40px var(--cyan-glow); }
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--cyan-dim); border-radius: 2px; }
+
+  /* ── Floating data particles ── */
+  .particle {
+    position: fixed;
+    width: 2px;
+    height: 2px;
+    background: var(--cyan);
+    border-radius: 50%;
+    opacity: 0;
+    animation: float linear infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  @keyframes float {
+    0% { opacity: 0; transform: translateY(100vh); }
+    10% { opacity: 0.6; }
+    90% { opacity: 0.6; }
+    100% { opacity: 0; transform: translateY(-10vh); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Floating particles -->
+<div class="particle" style="left:10%;animation-duration:8s;animation-delay:0s"></div>
+<div class="particle" style="left:20%;animation-duration:12s;animation-delay:2s"></div>
+<div class="particle" style="left:35%;animation-duration:9s;animation-delay:4s"></div>
+<div class="particle" style="left:50%;animation-duration:11s;animation-delay:1s"></div>
+<div class="particle" style="left:65%;animation-duration:10s;animation-delay:3s"></div>
+<div class="particle" style="left:80%;animation-duration:8s;animation-delay:5s"></div>
+<div class="particle" style="left:90%;animation-duration:13s;animation-delay:0.5s"></div>
+
+<div class="radial-pulse"></div>
+
+<div class="hud-layout">
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="logo">MAY</div>
+    <div class="status">
+      <span><span class="status-dot"></span>CONNECTED</span>
+      <span>MODEL: PHI4-MINI 3.8B</span>
+      <span>GPU: 62%</span>
+      <span>RAM: 4.2GB</span>
+      <span>MODE: ASK_BEFORE_ACTION</span>
+    </div>
+  </div>
+
+  <!-- Left Panel — Brain Regions -->
+  <div class="left-panel">
+    <div class="brain-region active">
+      <div class="region-name">Thalamus</div>
+      <div class="region-model">Router · qwen3:0.6b</div>
+      <div class="region-bar"><div class="fill" style="width:85%"></div></div>
+    </div>
+    <div class="brain-region">
+      <div class="region-name">Prefrontal</div>
+      <div class="region-model">Main LLM · phi4-mini</div>
+      <div class="region-bar"><div class="fill" style="width:60%"></div></div>
+    </div>
+    <div class="brain-region">
+      <div class="region-name">Hippocampus</div>
+      <div class="region-model">Memory · LanceDB + SQLite</div>
+      <div class="region-bar"><div class="fill" style="width:40%"></div></div>
+    </div>
+    <div class="brain-region">
+      <div class="region-name">Cerebellum</div>
+      <div class="region-model">Tools · 269+ actions</div>
+      <div class="region-bar"><div class="fill" style="width:70%"></div></div>
+    </div>
+    <div class="brain-region">
+      <div class="region-name">Amygdala</div>
+      <div class="region-model">Tone · 10 moods</div>
+      <div class="region-bar"><div class="fill" style="width:30%"></div></div>
+    </div>
+    <div class="brain-region">
+      <div class="region-name">Broca's Area</div>
+      <div class="region-model">Personality · Shikimori</div>
+      <div class="region-bar"><div class="fill" style="width:50%"></div></div>
+    </div>
+    <div class="brain-region">
+      <div class="region-name">Brainstem</div>
+      <div class="region-model">Daemon · TCP :7650</div>
+      <div class="region-bar"><div class="fill" style="width:95%"></div></div>
+    </div>
+  </div>
+
+  <!-- Center — Avatar + Chat -->
+  <div class="center-panel">
+    <div class="avatar-container">
+      <div class="avatar-ring"></div>
+      <div class="avatar-ring-2"></div>
+      <div class="avatar-orb"></div>
+    </div>
+    <div class="avatar-label">M A Y</div>
+    <div class="avatar-state">READY</div>
+
+    <div class="chat-area">
+      <div class="chat-bubble may">
+        Hey~ What's up? I'm here if you need anything.
+      </div>
+      <div class="chat-bubble user">
+        Open Chrome and search for AI news
+      </div>
+      <div class="chat-bubble may">
+        Done~ Chrome's open and I found some AI news for you.
+        <div class="tool-indicator">
+          🔧 open_app("chrome") ✓ · web_search("AI news") ✓ · 1.2s
+        </div>
+      </div>
+      <div class="chat-bubble user">
+        What time is it?
+      </div>
+      <div class="chat-bubble may">
+        It's 3:47 PM on a Sunday~ Don't forget to take a break soon!
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel — Endocrine + Status -->
+  <div class="right-panel">
+    <div class="status-card">
+      <div class="card-title">Endocrine System</div>
+      <div class="hormone-bar">
+        <span class="label">cortisol</span>
+        <div class="bar"><div class="fill cortisol" style="width:25%"></div></div>
+        <span class="value">0.25</span>
+      </div>
+      <div class="hormone-bar">
+        <span class="label">dopamine</span>
+        <div class="bar"><div class="fill dopamine" style="width:65%"></div></div>
+        <span class="value">0.65</span>
+      </div>
+      <div class="hormone-bar">
+        <span class="label">serotonin</span>
+        <div class="bar"><div class="fill serotonin" style="width:70%"></div></div>
+        <span class="value">0.70</span>
+      </div>
+      <div class="hormone-bar">
+        <span class="label">adrenaline</span>
+        <div class="bar"><div class="fill adrenaline" style="width:15%"></div></div>
+        <span class="value">0.15</span>
+      </div>
+      <div class="hormone-bar">
+        <span class="label">oxytocin</span>
+        <div class="bar"><div class="fill oxytocin" style="width:45%"></div></div>
+        <span class="value">0.45</span>
+      </div>
+      <div class="hormone-bar">
+        <span class="label">endorphin</span>
+        <div class="bar"><div class="fill endorphin" style="width:35%"></div></div>
+        <span class="value">0.35</span>
+      </div>
+    </div>
+
+    <div class="status-card">
+      <div class="card-title">Sleep Cycle</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:6px">
+        State: <span style="color:#4ade80">WAKE</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace">
+        Idle: 0s · Last interaction: just now
+      </div>
+    </div>
+
+    <div class="status-card">
+      <div class="card-title">Recent Memory</div>
+      <div class="memory-item">
+        <div class="mem-type">Episodic</div>
+        Opened Chrome, searched AI news — 2 min ago
+      </div>
+      <div class="memory-item">
+        <div class="mem-type">Semantic</div>
+        User prefers VS Code for coding tasks
+      </div>
+      <div class="memory-item">
+        <div class="mem-type">Procedural</div>
+        Morning routine: open Chrome → check email → weather
+      </div>
+    </div>
+
+    <div class="status-card">
+      <div class="card-title">Screen Context</div>
+      <div style="font-size:12px;color:var(--text-dim)">
+        Active: Chrome — "AI News - Google Search"
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Bar — Input -->
+  <div class="bottom-bar">
+    <input class="input-field" type="text" placeholder="Talk to May..." />
+    <button class="mic-btn" id="micBtn">🎤</button>
+  </div>
+
+</div>
+
+<script>
+  // Animate hormone bars randomly
+  setInterval(() => {
+    document.querySelectorAll('.hormone-bar .fill').forEach(fill => {
+      const current = parseFloat(fill.style.width);
+      const delta = (Math.random() - 0.5) * 6;
+      const next = Math.max(5, Math.min(95, current + delta));
+      fill.style.width = next + '%';
+    });
+  }, 2000);
+
+  // Mic button toggle
+  const micBtn = document.getElementById('micBtn');
+  micBtn.addEventListener('click', () => {
+    micBtn.classList.toggle('listening');
+  });
+
+  // Brain region click
+  document.querySelectorAll('.brain-region').forEach(region => {
+    region.addEventListener('click', () => {
+      document.querySelectorAll('.brain-region').forEach(r => r.classList.remove('active'));
+      region.classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>

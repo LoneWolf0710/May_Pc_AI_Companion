@@ -53,6 +53,16 @@ def _ensure_lancedb():
 EMBEDDING_DIM = 384  # all-MiniLM-L6-v2 output dimension
 
 
+def _default_db_path() -> Path:
+    """Resolve the memory.lance path. In bundled mode, use %LOCALAPPDATA%\\May\\data\\."""
+    import sys as _sys
+    if getattr(_sys, "frozen", False):
+        base = Path(__import__("os").environ.get("LOCALAPPDATA", Path.home())) / "May" / "data"
+    else:
+        base = Path(__file__).resolve().parent.parent / "data"
+    return base / "memory.lance"
+
+
 class VectorStore:
     """Manages episodic memory via vector similarity search.
 
@@ -60,8 +70,8 @@ class VectorStore:
     so the app still works without the ML dependencies.
     """
 
-    def __init__(self, db_path: str = "../data/memory.lance"):
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: str = None):
+        self.db_path = Path(db_path) if db_path else _default_db_path()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.table_name = "conversations"
         self._db = None
@@ -183,6 +193,14 @@ class VectorStore:
             List of matching conversations with scores
         """
         self._ensure_db()
+
+        # P5: Read memory_search_top_k from auto-tuner gene
+        try:
+            from intelligence.tuner_cache import get_gene
+            n_results = int(get_gene("memory_search_top_k", default=n_results))
+        except Exception:
+            pass
+
         if self._use_fallback:
             return self._sqlite_search(query, n_results, time_filter_days)
 
@@ -218,6 +236,8 @@ class VectorStore:
         time_filter_days: Optional[int],
     ) -> list[dict]:
         """Fallback text search using SQLite LIKE."""
+        # Escape LIKE wildcards in user query to prevent injection
+        safe_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         with sqlite3.connect(self._sqlite_path) as conn:
             if time_filter_days:
                 cutoff = (
@@ -226,17 +246,17 @@ class VectorStore:
                 cursor = conn.execute(
                     "SELECT id, summary, topic, timestamp "
                     "FROM conversations "
-                    "WHERE summary LIKE ? AND timestamp >= ? "
+                    "WHERE summary LIKE ? ESCAPE '\\' AND timestamp >= ? "
                     "ORDER BY timestamp DESC LIMIT ?",
-                    (f"%{query}%", cutoff, n_results),
+                    (f"%{safe_query}%", cutoff, n_results),
                 )
             else:
                 cursor = conn.execute(
                     "SELECT id, summary, topic, timestamp "
                     "FROM conversations "
-                    "WHERE summary LIKE ? "
+                    "WHERE summary LIKE ? ESCAPE '\\' "
                     "ORDER BY timestamp DESC LIMIT ?",
-                    (f"%{query}%", n_results),
+                    (f"%{safe_query}%", n_results),
                 )
             return [
                 {"id": r[0], "summary": r[1], "topic": r[2], "timestamp": r[3], "score": 0}

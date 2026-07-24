@@ -1,0 +1,505 @@
+{
+  "_comment": "Fallback strategy per action type — which methods to try and in what order (269 actions)",
+  "filesystem": {
+    "delete_file": {
+      "description": "Delete a file with 7-method fallback chain",
+      "methods": [
+        "method_1_os_remove: os.remove(path)",
+        "method_2_win32file: win32file.DeleteFileW(path)",
+        "method_3_cmd_del: subprocess.run(['cmd', '/c', 'del', '/F', '/Q', path])",
+        "method_4_clear_attributes: SetFileAttributesW(path, NORMAL) -> os.remove(path)",
+        "method_5_take_ownership: take_ownership(path) -> set_full_permissions(path) -> os.remove(path)",
+        "method_6_kill_locking: kill_locking_process(path) -> os.remove(path)",
+        "method_7_delay_reboot: MoveFileExW(path, null, MOVEFILE_DELAY_UNTIL_REBOOT)"
+      ],
+      "verifier": "filesystem.delete_file"
+    },
+    "create_file": {
+      "description": "Create a file with 3-method fallback",
+      "methods": [
+        "method_1_pathlib: Path(path).write_text(content)",
+        "method_2_open_builtin: open(path, 'w').write(content)",
+        "method_3_powershell: PowerShell Set-Content with base64 encoding"
+      ],
+      "verifier": "filesystem.create_file"
+    },
+    "copy_file": {
+      "description": "Copy a file with 3-method fallback",
+      "methods": [
+        "method_1_shutil: shutil.copy2(src, dst)",
+        "method_2_win32file: win32file.CopyFileW(src, dst)",
+        "method_3_cmd_copy: subprocess.run(['cmd', '/c', 'copy', '/Y', src, dst])"
+      ],
+      "verifier": "filesystem.copy_file"
+    },
+    "move_file": {
+      "description": "Move/rename a file with 3-method fallback",
+      "methods": [
+        "method_1_pathlib: Path(src).rename(dst)",
+        "method_2_shutil: shutil.move(src, dst)",
+        "method_3_win32file: win32file.MoveFileW(src, dst)"
+      ],
+      "verifier": "filesystem.move_file"
+    },
+    "create_folder": {
+      "description": "Create a directory with 2-method fallback",
+      "methods": [
+        "method_1_pathlib: Path(path).mkdir(parents=True, exist_ok=True)",
+        "method_2_powershell: New-Item -ItemType Directory"
+      ],
+      "verifier": "filesystem.create_folder"
+    },
+    "read_file": {
+      "description": "Read file content with 2-method fallback",
+      "methods": [
+        "method_1_pathlib: Path(path).read_text(encoding='utf-8')",
+        "method_2_powershell: Get-Content -Path path -Raw"
+      ],
+      "verifier": "filesystem.read_file"
+    },
+    "list_directory": {
+      "description": "List directory contents with 2-method fallback",
+      "methods": [
+        "method_1_pathlib: Path(path).iterdir()",
+        "method_2_powershell: Get-ChildItem with JSON output"
+      ],
+      "verifier": "filesystem.list_directory"
+    },
+    "search_files": {
+      "description": "Search files by pattern with 2-method fallback",
+      "methods": [
+        "method_1_pathlib: Path(path).rglob(pattern)",
+        "method_2_powershell: Get-ChildItem -Recurse -Filter pattern"
+      ],
+      "verifier": "filesystem.search_files"
+    }
+  },
+  "process": {
+    "kill_process": {
+      "description": "Kill a process with 5-method fallback chain",
+      "methods": [
+        "method_1_psutil: psutil.Process(pid).kill()",
+        "method_2_win32api: win32api.TerminateProcess(OpenProcess(pid))",
+        "method_3_taskkill: subprocess.run(['taskkill', '/F', '/PID', str(pid)])",
+        "method_4_taskkill_tree: subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)])",
+        "method_5_max_access: Open with max access rights -> TerminateProcess"
+      ],
+      "verifier": "process.kill_process"
+    },
+    "launch_process": {
+      "description": "Launch a new process with 3-method fallback",
+      "methods": [
+        "method_1_subprocess: subprocess.Popen(cmd)",
+        "method_2_powershell: PowerShell Start-Process",
+        "method_3_os_system: os.system('start ' + cmd)"
+      ],
+      "verifier": "process.launch_process"
+    },
+    "suspend_process": {
+      "description": "Suspend a process via NtSuspendProcess",
+      "methods": [
+        "method_1_ctypes: ntdll.NtSuspendProcess(handle)",
+        "method_2_powershell: PowerShell Suspend method"
+      ],
+      "verifier": "process.suspend_process"
+    },
+    "resume_process": {
+      "description": "Resume a suspended process via NtResumeProcess",
+      "methods": [
+        "method_1_ctypes: ntdll.NtResumeProcess(handle)",
+        "method_2_powershell: PowerShell Resume method"
+      ],
+      "verifier": "process.resume_process"
+    },
+    "set_priority": {
+      "description": "Set process priority with 2-method fallback",
+      "methods": [
+        "method_1_psutil: psutil.Process(pid).nice(priority)",
+        "method_2_powershell: Get-Process | ForEach-Object { $_.PriorityClass = 'High' }"
+      ],
+      "verifier": "process.set_priority"
+    },
+    "kill_process_tree": {
+      "description": "Kill entire process tree",
+      "methods": [
+        "method_1_taskkill_tree: taskkill /F /T /PID",
+        "method_2_psutil: psutil.Process(pid).kill()"
+      ],
+      "verifier": "process.kill_process_tree"
+    }
+  },
+  "application": {
+    "launch_app": {
+      "description": "Launch an app with 7-strategy fallback",
+      "methods": [
+        "strategy_1_shell_uri: os.startfile(shell_uri) — for Settings, UWP, folders",
+        "strategy_2_known_registry: Known app paths with alias support",
+        "strategy_3_startfile: os.startfile(app_name) — Windows shell resolution",
+        "strategy_4_powershell: PowerShell Start-Process",
+        "strategy_5_exe_retry: Append .exe and retry os.startfile",
+        "strategy_6_start_menu: Search Start Menu shortcuts (user + system-wide)",
+        "strategy_7_install_dirs: Search common install directories"
+      ],
+      "verifier": "application.launch_app"
+    },
+    "close_app": {
+      "description": "Close an app gracefully, then force with 3-method fallback",
+      "methods": [
+        "method_1_graceful: proc.CloseMainWindow()",
+        "method_2_taskkill: taskkill /IM name.exe",
+        "method_3_force: taskkill /F /IM name.exe"
+      ],
+      "verifier": "application.close_app"
+    },
+    "launch_with_args": {
+      "description": "Launch app with arguments",
+      "methods": [
+        "method_1_known_registry: Known app path + args",
+        "method_2_powershell: Start-Process with ArgumentList"
+      ],
+      "verifier": "application.launch_with_args"
+    },
+    "launch_as_admin": {
+      "description": "Launch app with elevated (admin) privileges",
+      "methods": [
+        "method_1_powershell: Start-Process -Verb RunAs"
+      ],
+      "verifier": "application.launch_as_admin"
+    }
+  },
+  "system": {
+    "set_volume": {
+      "description": "Set system volume with 3-method fallback",
+      "methods": [
+        "method_1_pycaw: IAudioEndpointVolume.SetMasterVolumeLevelScalar()",
+        "method_2_powershell: PowerShell audio commands via SendKeys",
+        "method_3_sendkeys: WScript.Shell SendKeys for volume keys"
+      ],
+      "verifier": "system.set_volume"
+    },
+    "get_volume": {
+      "description": "Get current volume level",
+      "methods": [
+        "method_1_pycaw: IAudioEndpointVolume.GetMasterVolumeLevelScalar()",
+        "method_2_powershell: Fallback return -1"
+      ],
+      "verifier": "system.get_volume"
+    },
+    "mute": {
+      "description": "Mute audio output",
+      "methods": [
+        "method_1_pycaw: IAudioEndpointVolume.SetMute(1)",
+        "method_2_powershell: WScript.Shell SendKeys([char]0xAD)"
+      ],
+      "verifier": "system.mute"
+    },
+    "unmute": {
+      "description": "Unmute audio output",
+      "methods": [
+        "method_1_pycaw: IAudioEndpointVolume.SetMute(0)",
+        "method_2_powershell: WScript.Shell SendKeys([char]0xAD)"
+      ],
+      "verifier": "system.unmute"
+    },
+    "shutdown": {
+      "description": "Shutdown the system with 3-method fallback",
+      "methods": [
+        "method_1_exitwindowsex: ctypes.windll.user32.ExitWindowsEx(EWX_SHUTDOWN | EWX_FORCE)",
+        "method_2_shutdown_cmd: subprocess.run(['shutdown', '/s', '/t', str(delay)])",
+        "method_3_powershell: Stop-Computer -Force"
+      ],
+      "verifier": "system.shutdown"
+    },
+    "restart": {
+      "description": "Restart the system with 3-method fallback",
+      "methods": [
+        "method_1_exitwindowsex: ctypes.windll.user32.ExitWindowsEx(EWX_REBOOT | EWX_FORCE)",
+        "method_2_shutdown_cmd: subprocess.run(['shutdown', '/r', '/t', str(delay)])",
+        "method_3_powershell: Restart-Computer -Force"
+      ],
+      "verifier": "system.restart"
+    },
+    "sleep": {
+      "description": "Put system to sleep",
+      "methods": [
+        "method_1_powrprof: ctypes.windll.powrprof.SetSuspendState(False, True, False)",
+        "method_2_powershell: Application.SetSuspendState('Suspend')"
+      ],
+      "verifier": "system.sleep"
+    },
+    "lock": {
+      "description": "Lock the workstation",
+      "methods": [
+        "method_1_win32: ctypes.windll.user32.LockWorkStation()",
+        "method_2_rundll32: rundll32.exe user32.dll,LockWorkStation"
+      ],
+      "verifier": "system.lock"
+    },
+    "set_brightness": {
+      "description": "Set display brightness",
+      "methods": [
+        "method_1_sbc: screen_brightness_control.set_brightness(level)",
+        "method_2_wmi: WmiMonitorBrightnessMethods.WmiSetBrightness(level)"
+      ],
+      "verifier": "system.set_brightness"
+    },
+    "toggle_wifi": {
+      "description": "Enable/disable WiFi adapter",
+      "methods": [
+        "method_1_netsh: netsh interface set interface 'Wi-Fi' enable/disable",
+        "method_2_powershell: Enable/Disable-NetAdapter"
+      ],
+      "verifier": "system.toggle_wifi"
+    },
+    "connect_wifi": {
+      "description": "Connect to a WiFi network",
+      "methods": [
+        "method_1_powershell: netsh wlan connect name='SSID'",
+        "method_2_netsh: netsh wlan connect name=SSID password=PW"
+      ],
+      "verifier": "system.connect_wifi"
+    },
+    "set_system_env": {
+      "description": "Set a system environment variable with broadcast",
+      "methods": [
+        "method_1_winreg: winreg.SetValueEx + SendMessageTimeoutW(WM_SETTINGCHANGE)"
+      ],
+      "verifier": "system.set_system_env"
+    },
+    "delete_system_env": {
+      "description": "Delete a system environment variable",
+      "methods": [
+        "method_1_winreg: winreg.DeleteValue + SendMessageTimeoutW(WM_SETTINGCHANGE)"
+      ],
+      "verifier": "system.delete_system_env"
+    }
+  },
+  "window": {
+    "set_foreground": {
+      "description": "Bring a window to the front with 4-method fallback",
+      "methods": [
+        "method_1_setforeground: AttachThreadInput + SetForegroundWindow + Detach",
+        "method_2_powershell: [Microsoft.VisualBasic.Interaction]::AppActivate(title)",
+        "method_3_alt_key: Simulate Alt key press -> SetForegroundWindow",
+        "method_4_showwindow: ShowWindow(hwnd, SW_RESTORE) -> SetForegroundWindow"
+      ],
+      "verifier": "window.set_foreground"
+    },
+    "minimize_window": {
+      "description": "Minimize a window",
+      "methods": [
+        "method_1_win32: ShowWindow(hwnd, SW_MINIMIZE)",
+        "method_2_powershell: WScript.Shell SendKeys('% n')"
+      ],
+      "verifier": "window.minimize_window"
+    },
+    "maximize_window": {
+      "description": "Maximize a window",
+      "methods": [
+        "method_1_win32: ShowWindow(hwnd, SW_MAXIMIZE)",
+        "method_2_powershell: WScript.Shell SendKeys('% x')"
+      ],
+      "verifier": "window.maximize_window"
+    },
+    "close_window": {
+      "description": "Close a window with 3-method fallback",
+      "methods": [
+        "method_1_wm_close: PostMessage(hwnd, WM_CLOSE, 0, 0)",
+        "method_2_powershell: Stop-Process -Id PID -Force",
+        "method_3_taskkill: taskkill /F /PID pid"
+      ],
+      "verifier": "window.close_window"
+    },
+    "find_window": {
+      "description": "Find a window by title",
+      "methods": [
+        "method_1_win32: EnumWindows + GetWindowTextW partial match",
+        "method_2_powershell: Get-Process | Where-Object MainWindowTitle"
+      ],
+      "verifier": "window.find_window"
+    },
+    "take_window_screenshot": {
+      "description": "Capture a specific window to file",
+      "methods": [
+        "method_1_pil: ImageGrab.grab(bbox=window_rect)"
+      ],
+      "verifier": "window.take_window_screenshot"
+    }
+  },
+  "input": {
+    "press_key": {
+      "description": "Press and release a key via SendInput",
+      "methods": [
+        "method_1_sendinput: SendInput with KEYEVENTF_UNICODE",
+        "method_2_powershell: WScript.Shell SendKeys"
+      ],
+      "verifier": "input.press_key"
+    },
+    "type_text": {
+      "description": "Type text with adaptive strategy",
+      "methods": [
+        "method_1_short: SendInput char by char (text < 50 chars)",
+        "method_2_clipboard: Copy to clipboard + Ctrl+V (text >= 50 chars)"
+      ],
+      "verifier": "input.type_text"
+    },
+    "hotkey": {
+      "description": "Send a key combination",
+      "methods": [
+        "method_1_sendinput: Press all modifier keys, then release in reverse",
+        "method_2_powershell: WScript.Shell SendKeys with modifier syntax"
+      ],
+      "verifier": "input.hotkey"
+    },
+    "left_click": {
+      "description": "Left click at coordinates",
+      "methods": [
+        "method_1_sendinput: MOUSEEVENTF_LEFTDOWN + MOUSEEVENTF_LEFTUP",
+        "method_2_powershell: mouse_event via Add-Type"
+      ],
+      "verifier": "input.left_click"
+    },
+    "screenshot_full": {
+      "description": "Capture the full screen",
+      "methods": [
+        "method_1_pil: ImageGrab.grab()",
+        "method_2_powershell: System.Drawing.Graphics.CopyFromScreen"
+      ],
+      "verifier": "input.screenshot_full"
+    }
+  },
+  "registry": {
+    "write_value": {
+      "description": "Write a registry value with auto-backup",
+      "methods": [
+        "method_1_winreg: winreg.SetValueEx with backup via reg export",
+        "method_2_reg_exe: reg add with /f flag"
+      ],
+      "verifier": "registry.write_value"
+    },
+    "read_value": {
+      "description": "Read a registry value",
+      "methods": [
+        "method_1_winreg: winreg.QueryValueEx",
+        "method_2_reg_exe: reg query with output parsing"
+      ],
+      "verifier": "registry.read_value"
+    },
+    "create_key": {
+      "description": "Create a registry key",
+      "methods": [
+        "method_1_winreg: winreg.CreateKey",
+        "method_2_reg_exe: reg add with /f flag"
+      ],
+      "verifier": "registry.create_key"
+    },
+    "delete_key": {
+      "description": "Delete a registry key",
+      "methods": [
+        "method_1_winreg: winreg.DeleteKey",
+        "method_2_reg_exe: reg delete with /f flag"
+      ],
+      "verifier": "registry.delete_key"
+    }
+  },
+  "services": {
+    "start_service": {
+      "description": "Start a Windows service",
+      "methods": [
+        "method_1_powershell: Start-Service -Name",
+        "method_2_sc: sc.exe start service_name"
+      ],
+      "verifier": "services.start_service"
+    },
+    "stop_service": {
+      "description": "Stop a Windows service",
+      "methods": [
+        "method_1_powershell: Stop-Service -Name -Force",
+        "method_2_sc: sc.exe stop service_name"
+      ],
+      "verifier": "services.stop_service"
+    },
+    "restart_service": {
+      "description": "Restart a Windows service",
+      "methods": [
+        "method_1_powershell: Restart-Service -Name -Force",
+        "method_2_sc: sc.exe stop + sc.exe start"
+      ],
+      "verifier": "services.restart_service"
+    },
+    "set_startup_type": {
+      "description": "Set service startup type",
+      "methods": [
+        "method_1_powershell: Set-Service -StartupType",
+        "method_2_sc: sc.exe config start= auto/demand/disabled"
+      ],
+      "verifier": "services.set_startup_type"
+    },
+    "enable_service": {
+      "description": "Enable a service (set to Automatic)",
+      "methods": [
+        "method_1_powershell: Set-Service -StartupType Automatic",
+        "method_2_sc: sc.exe config start= auto"
+      ],
+      "verifier": "services.enable_service"
+    },
+    "disable_service": {
+      "description": "Disable a service (set to Disabled)",
+      "methods": [
+        "method_1_powershell: Set-Service -StartupType Disabled",
+        "method_2_sc: sc.exe config start= disabled"
+      ],
+      "verifier": "services.disable_service"
+    },
+    "list_services": {
+      "description": "List Windows services",
+      "methods": [
+        "method_1_powershell: Get-Service with filter",
+        "method_2_sc: sc.exe query type= service state= all"
+      ],
+      "verifier": "services.list_services"
+    },
+    "list_tasks": {
+      "description": "List scheduled tasks",
+      "methods": [
+        "method_1_powershell: Get-ScheduledTask",
+        "method_2_schtasks: schtasks.exe /Query /FO CSV"
+      ],
+      "verifier": "services.list_tasks"
+    }
+  },
+  "browser": {
+    "navigate": {
+      "description": "Navigate to a URL",
+      "methods": [
+        "method_1_playwright: page.goto(url, timeout=30000)",
+        "method_2_js: window.location.href = url"
+      ],
+      "verifier": "browser.navigate"
+    },
+    "click_element": {
+      "description": "Click an element by selector",
+      "methods": [
+        "method_1_playwright: page.click(selector)",
+        "method_2_js: document.querySelector(selector).click()"
+      ],
+      "verifier": "browser.click_element"
+    },
+    "type_into_element": {
+      "description": "Type text into an element",
+      "methods": [
+        "method_1_playwright: page.fill(selector, text)",
+        "method_2_js: el.value = text; el.dispatchEvent(new Event('input'))"
+      ],
+      "verifier": "browser.type_into_element"
+    },
+    "take_screenshot": {
+      "description": "Take a screenshot of the page",
+      "methods": [
+        "method_1_playwright: page.screenshot(path)",
+        "method_2_cdp: Page.captureScreenshot via CDP"
+      ],
+      "verifier": "browser.take_screenshot"
+    }
+  }
+}
