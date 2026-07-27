@@ -180,12 +180,24 @@ def _get_tools_for_message(message: str) -> list[dict]:
 def _is_small_local_model(model: str) -> bool:
     """Check if a model is too small for native tool calling.
 
-    Small models (phi4-mini, qwen3:4b, etc.) often return HTTP 500
-    when sent native tool definitions. For these, we inject tools as
-    text into the system prompt instead.
+    Small models (phi4-mini, qwen3:4b, qwen3:0.6b etc.) often return HTTP 500
+    when sent native tool definitions, or produce reasoning dumps instead of
+    tool calls. For these, we inject tools as text into the system prompt.
     """
     model_lower = model.lower()
-    small_markers = ("phi4", "tiny", "mini", "3b", "1b", "qwen3:4b", "qwen2.5:3b")
+    small_markers = ("phi4", "tiny", "mini", "3b", "1b", "0.6b", "0.5b", "qwen3:4b", "qwen2.5:3b")
+    # Also catch any model with a sub-4B size pattern like ":1.5b", ":0.6b", ":2b"
+    import re as _re_small
+    if _re_small.search(r':\d*\.?\d+b\b', model_lower):
+        # Extract the number before 'b'
+        size_match = _re_small.search(r':(\d*\.?\d+)b\b', model_lower)
+        if size_match:
+            try:
+                size_val = float(size_match.group(1))
+                if size_val < 8:  # Sub-8B models can't do reliable native tool calling
+                    return True
+            except ValueError:
+                pass
     return any(m in model_lower for m in small_markers)
 
 
@@ -505,13 +517,17 @@ async def execute_tool(name: str, args: dict) -> str:
     _exec_start = _exec_time.time()
 
     # Clean garbled text from LLM output before execution
+    # NOTE: We ONLY strip leaked <think>...</think> tags here.
+    # We do NOT collapse repeated characters — that regex destroyed legitimate content
+    # like double letters in essays, code, poetry, etc. (the "pokemon ddddd" bug).
+    # The LLM output is trusted as-is for content; only structural tags are stripped.
     if name == "type_text" and "text" in args:
         import re as _re_clean
         raw = args["text"]
-        # Collapse 3+ consecutive identical characters (tttttttttttthe → the)
-        cleaned = _re_clean.sub(r"(.)\1{2,}", r"\1", raw)
-        # Remove <think>...</think> tags if leaked into text
-        cleaned = _re_clean.sub(r"<think>.*?</think>", "", cleaned, flags=_re_clean.DOTALL)
+        # Remove <think>...</think> tags if leaked into text (reasoning model artifact)
+        cleaned = _re_clean.sub(r"<think>.*?</think>", "", raw, flags=_re_clean.DOTALL)
+        # Also remove lines that are just XML-like tags (e.g. <answer>, </answer>)
+        cleaned = _re_clean.sub(r"^\s*<[^>]+>\s*$", "", cleaned, flags=_re_clean.MULTILINE)
         cleaned = cleaned.strip()
         if cleaned:
             args["text"] = cleaned
@@ -521,8 +537,9 @@ async def execute_tool(name: str, args: dict) -> str:
     if name == "write_file" and "content" in args:
         import re as _re_clean2
         raw = args["content"]
-        cleaned = _re_clean2.sub(r"(.)\1{2,}", r"\1", raw)
-        cleaned = _re_clean2.sub(r"<think>.*?</think>", "", cleaned, flags=_re_clean2.DOTALL)
+        # Remove <think>...</think> tags only — do NOT touch the actual content
+        cleaned = _re_clean2.sub(r"<think>.*?</think>", "", raw, flags=_re_clean2.DOTALL)
+        cleaned = _re_clean2.sub(r"^\s*<[^>]+>\s*$", "", cleaned, flags=_re_clean2.MULTILINE)
         cleaned = cleaned.strip()
         if cleaned:
             args["content"] = cleaned
@@ -635,6 +652,13 @@ async def execute_tool(name: str, args: dict) -> str:
         except Exception:
             pass
         return f"Error: {str(e)[:200]}"
+    finally:
+        # Guarantee no modifier keys (Ctrl, Alt, Shift, Win) remain stuck in Windows OS
+        try:
+            from core.layers.L5_input import _release_all_modifiers
+            _release_all_modifiers()
+        except Exception:
+            pass
 
 
 def _sanitize_http_args(name: str, args: dict) -> None:
@@ -1085,26 +1109,20 @@ def _clean_response_text(text: str) -> str:
 # ── Smart content routing helper (extracted for testability) ──────────────
 
 def _smart_route_type_text(tool_name: str, tool_args: dict) -> tuple[str, dict, dict | None]:
-    """If type_text content is long (>500 chars), convert to write_file + open_app.
+    """If type_text content is extremely long without a target window, convert to write_file.
 
-    This is a safety net for when the LLM ignores the system prompt guideline
-    about using write_file for long content instead of type_text.
-
-    Args:
-        tool_name: The tool name (e.g. "type_text", "write_file").
-        tool_args: The tool arguments dict.
-
-    Returns:
-        (tool_name, tool_args, extra_open) where:
-        - tool_name may be changed from "type_text" to "write_file"
-        - tool_args may be changed to {path, content}
-        - extra_open is {name: "open_app", args: {app_name: path}} or None
+    Never converts if a target window_title is specified (e.g. Notepad, Word), allowing
+    direct clipboard typing into the application window.
     """
     if tool_name != "type_text":
         return tool_name, tool_args, None
 
+    # Never convert if typing into a target app window (like Notepad or Word)
+    if tool_args.get("window_title"):
+        return tool_name, tool_args, None
+
     text_content = tool_args.get("text", "")
-    if len(text_content) <= 500:
+    if len(text_content) <= 3000:
         return tool_name, tool_args, None
 
     # Determine file extension from content hints
@@ -1125,8 +1143,32 @@ def _smart_route_type_text(tool_name: str, tool_args: dict) -> tuple[str, dict, 
     logger.info("Smart routing: type_text (%d chars) → write_file(%s)", len(text_content), file_path)
 
     new_args = {"path": file_path, "content": text_content}
-    extra_open = {"name": "open_app", "args": {"app_name": file_path}}
+    extra_open = None
     return "write_file", new_args, extra_open
+
+
+def _parse_app_and_tab_intent(app_name_raw: str) -> tuple[str, bool, str]:
+    """Parse raw app name for tab/file intent.
+
+    e.g. 'a new tab in notepad' -> ('notepad', True, 'ctrl+n')
+    e.g. 'a new tab in chrome'  -> ('chrome',  True, 'ctrl+t')
+    e.g. 'notepad'              -> ('notepad', False, '')
+    """
+    clean = app_name_raw.lower().strip()
+    wants_new_tab = False
+    shortcut = "ctrl+n"
+
+    # Check for "tab in X", "new tab in X", "document in X", "file in X"
+    tab_match = re.search(r'(?:a\s+)?(?:new\s+)?(?:tab|doc|document|file|window)\s+(?:in|into|of|on)\s+(.+)$', clean, re.IGNORECASE)
+    if tab_match:
+        clean = tab_match.group(1).strip()
+        wants_new_tab = True
+        if any(b in clean for b in ("chrome", "firefox", "edge", "brave", "browser", "opera")):
+            shortcut = "ctrl+t"
+        else:
+            shortcut = "ctrl+n"
+
+    return clean, wants_new_tab, shortcut
 
 
 # ── Fast-path: skip LLM for obvious single-tool commands ─────────────────
@@ -1159,9 +1201,50 @@ def _try_fast_path(message: str) -> tuple[str, dict] | None:
     )
     if _compound_match:
         app_name = _compound_match.group(1).strip()
-        content_hint = _compound_match.group(2).strip()
-        _content = content_hint.strip('"\' ')
-        return ("__compound_open_and_type", {"app_name": app_name, "text": _content})
+        content_hint = _compound_match.group(2).strip().strip('"\' ')
+        _TOPIC_SIGNALS = (
+            r'\b(?:essay|poem|story|article|report|letter|email|code|script|function|'
+            r'summary|list of|notes? (?:about|on)|paragraph|description|biography|'
+            r'tutorial|guide|explanation|definition|example|sample|template|draft|'
+            r'review|analysis|comparison|pros and cons|advantages|disadvantages)\b',
+        )
+        _ABOUT_SIGNALS = re.search(
+            r'\b(?:about|on|for|regarding|concerning|related to|on the topic of)\b',
+            content_hint, re.IGNORECASE
+        )
+        _TOPIC_MATCH = any(
+            re.search(p, content_hint, re.IGNORECASE) for p in _TOPIC_SIGNALS
+        )
+        if _TOPIC_MATCH or _ABOUT_SIGNALS:
+            return ("__compound_generate_and_type", {"app_name": app_name, "prompt": content_hint, "full_prompt": message})
+        else:
+            return ("__compound_open_and_type", {"app_name": app_name, "text": content_hint})
+
+    # ── COMPOUND: "write/type/create X in/into Y" → generate/open + type ──
+    _write_in_app_match = re.match(
+        r'^(?:write|type|put|draft|compose|create|make)\s+(?:a\s+)?(?:new\s+)?(?:file\s+)?'
+        r'["\']?(.+?)["\']?\s+(?:in|into|on)\s+["\']?(.+?)["\']?\s*$', m
+    )
+    if _write_in_app_match:
+        content_hint = _write_in_app_match.group(1).strip().strip('"\' ')
+        app_name = _write_in_app_match.group(2).strip().strip('"\' ')
+        _TOPIC_SIGNALS = (
+            r'\b(?:essay|poem|story|article|report|letter|email|code|script|function|'
+            r'summary|list of|notes? (?:about|on)|paragraph|description|biography|'
+            r'tutorial|guide|explanation|definition|example|sample|template|draft|'
+            r'review|analysis|comparison|pros and cons|advantages|disadvantages)\b',
+        )
+        _ABOUT_SIGNALS = re.search(
+            r'\b(?:about|on|for|regarding|concerning|related to|on the topic of)\b',
+            content_hint, re.IGNORECASE
+        )
+        _TOPIC_MATCH = any(
+            re.search(p, content_hint, re.IGNORECASE) for p in _TOPIC_SIGNALS
+        )
+        if _TOPIC_MATCH or _ABOUT_SIGNALS:
+            return ("__compound_generate_and_type", {"app_name": app_name, "prompt": content_hint, "full_prompt": message})
+        else:
+            return ("__compound_open_and_type", {"app_name": app_name, "text": content_hint})
 
     # ── COMPOUND: "create/make X and open it in Y" → write_file + open_app ──
     _create_open_match = re.match(
@@ -1413,6 +1496,7 @@ async def jarvis_chat(
 
     LLM path: For complex/multi-step messages, send to LLM with tools.
     """
+    global _last_opened_app, _last_created_file, _last_searched_query
     from llm.providers import stream_chat_with_tools
 
     # ── Pronoun resolution — resolve 'in it', 'close it', etc. ──
@@ -1453,24 +1537,66 @@ async def jarvis_chat(
 
             # Handle compound commands (open_app + type_text)
             if tool_name == "__compound_open_and_type":
-                app_name = tool_args["app_name"]
+                raw_app = tool_args["app_name"]
                 text = tool_args["text"]
+                real_app, wants_tab, shortcut = _parse_app_and_tab_intent(raw_app)
                 # Step 1: Open the app
-                open_result = await execute_tool("open_app", {"app_name": app_name})
-                _update_pronoun_state("open_app", {"app_name": app_name})
-                yield f"*Opening {app_name}...*\n"
-                # Step 2: Wait for app to load, then type
+                open_result = await execute_tool("open_app", {"app_name": real_app})
+                _update_pronoun_state("open_app", {"app_name": real_app})
+                yield f"*Opening {real_app}...*\n"
                 import asyncio as _aio_cmp
-                await _aio_cmp.sleep(0.8)
-                type_result = await execute_tool("type_text", {"text": text, "window_title": app_name})
-                _update_pronoun_state("type_text", {"text": text, "window_title": app_name})
-                yield f"*Typing text...*\n"
-                # Record for reflex learning
-                if _conditioned_reflexes_ref is not None:
-                    try:
-                        _conditioned_reflexes_ref.record_example(message, "open_app", {"app_name": app_name})
-                    except Exception:
-                        pass
+                await _aio_cmp.sleep(1.0)
+                if wants_tab:
+                    yield f"*Opening new tab in {real_app}...*\n"
+                    await execute_tool("send_keys", {"keys": shortcut})
+                    await _aio_cmp.sleep(0.5)
+                yield f"*Typing into {real_app}...*\n"
+                type_result = await execute_tool("type_text", {"text": text, "window_title": real_app})
+                _update_pronoun_state("type_text", {"text": text, "window_title": real_app})
+                return
+
+            # Handle compound generate & type (open_app + generate_content + type_text)
+            if tool_name == "__compound_generate_and_type":
+                raw_app = tool_args["app_name"]
+                full_prompt = tool_args.get("full_prompt", message)
+                real_app, wants_tab, shortcut = _parse_app_and_tab_intent(raw_app)
+                # Step 1: Open the target app
+                yield f"*Opening {real_app}...*\n"
+                await execute_tool("open_app", {"app_name": real_app})
+                _update_pronoun_state("open_app", {"app_name": real_app})
+                import asyncio as _aio_gen
+                await _aio_gen.sleep(1.0)
+                if wants_tab:
+                    yield f"*Opening new tab in {real_app}...*\n"
+                    await execute_tool("send_keys", {"keys": shortcut})
+                    await _aio_gen.sleep(0.5)
+                # Step 2: Generate content via LLM
+                yield f"*Generating content for {real_app}...*\n"
+                gen_prompt = f"Write the requested content for: '{full_prompt}'. Output ONLY the body of the document/essay/poem/code. Do NOT include intro conversational text like 'Here is the essay' or 'Sure'."
+                generated_text = ""
+                try:
+                    from llm.providers import stream_chat_with_tools
+                    async for event in stream_chat_with_tools(
+                        provider=provider,
+                        model=model,
+                        messages=[{"role": "user", "content": gen_prompt}],
+                        system_prompt="You are a document generator. Output ONLY the document text directly. No commentary.",
+                        tools=None,
+                        max_tokens=2048,
+                    ):
+                        if event["type"] == "text":
+                            generated_text += event["content"]
+                except Exception as e:
+                    logger.error("Failed to generate content: %s", e)
+                    generated_text = f"Content for: {full_prompt}"
+
+                import re as _re_g
+                generated_text = _re_g.sub(r"<think>.*?</think>", "", generated_text, flags=_re_g.DOTALL).strip()
+                # Step 3: Wait and type into app
+                yield f"*Typing into {real_app}...*\n"
+                await execute_tool("type_text", {"text": generated_text, "window_title": real_app})
+                _update_pronoun_state("type_text", {"text": generated_text, "window_title": real_app})
+                yield f"Done~ Typed into {real_app}!\n"
                 return
 
             # Handle "create X and open it in Y" → write_file + open_app
@@ -1618,11 +1744,36 @@ async def jarvis_chat(
         # Small model path: inject tools as text, parse response for tool calls
         from llm.providers import _tools_as_prompt_text
         text_system = _tools_as_prompt_text(tools, system_prompt)
-        # Add explicit instruction to output tool calls as JSON
+        # Add STRONG instructions for small models to output tool calls as JSON
+        # Small models like qwen3:0.6b tend to "think out loud" instead of calling tools
         text_system += (
-            "\n\nIMPORTANT: When the user asks you to do something, you MUST call a tool. "
-            "Respond with a JSON tool call like: {\"tool\": \"open_app\", \"args\": {\"app_name\": \"notepad\"}} "
-            "Do NOT describe what you would do — actually call the tool."
+            "\n\n## CRITICAL RULES FOR TOOL CALLING\n"
+            "When the user asks you to DO something (open app, write text, search, etc.), "
+            "you MUST respond ONLY with JSON tool call(s). Do NOT explain or plan — just output the JSON.\n\n"
+            "Example: User says \"open notepad and write hello\"\n"
+            "Your response must be ONLY:\n"
+            "```json\n"
+            "{\"tool\": \"open_app\", \"args\": {\"app_name\": \"notepad\"}}\n"
+            "```\n"
+            "```json\n"
+            "{\"tool\": \"type_text\", \"args\": {\"text\": \"hello\", \"window_title\": \"notepad\"}}\n"
+            "```\n\n"
+            "Example: User says \"write an essay on pokemon in notepad\"\n"
+            "Your response must be ONLY:\n"
+            "```json\n"
+            "{\"tool\": \"open_app\", \"args\": {\"app_name\": \"notepad\"}}\n"
+            "```\n"
+            "```json\n"
+            "{\"tool\": \"type_text\", \"args\": {\"text\": \"Pokemon Essay\\n\\nPokemon is a franchise...\", \"window_title\": \"notepad\"}}\n"
+            "```\n\n"
+            "Example: User says \"search for cats\"\n"
+            "Your response must be ONLY:\n"
+            "```json\n"
+            "{\"tool\": \"web_search\", \"args\": {\"query\": \"cats\"}}\n"
+            "```\n\n"
+            "NEVER explain what you would do. NEVER say 'I will' or 'We need to'. "
+            "NEVER describe steps. Just output the tool call JSON blocks.\n"
+            "When generating content (essays, poems, code), YOU write the full content and put it in the tool args."
         )
         async for event in stream_chat_with_tools(
             provider=provider,
@@ -1719,7 +1870,23 @@ async def jarvis_chat(
         # Also clear any stale pending calls since user moved on to chat
         await _clear_pending_tool_calls()
         clean = _clean_response_text(_strip_tool_json(full_response))
-        if clean:
+        msg_lower = message.lower()
+        wants_app_write = any(p in msg_lower for p in ["in notepad", "into notepad", "in the notepad", "write in notepad", "type in notepad"])
+        target_app = "notepad" if wants_app_write else _last_opened_app
+
+        # SAFETY NET: If user requested typing in an app (or Notepad is open) and LLM produced
+        # text content without tool calls, automatically type the text into the target app!
+        if target_app and clean and len(clean) > 30 and ("\n" in clean or len(clean.split()) > 15):
+            # Strip conversational prefix if present (e.g. "Here's an essay on...")
+            import re as _re_sn
+            doc_body = _re_sn.sub(r'^(?:here(?:\'s| is)|i\'ve (?:written|created|opened)|sure|certainly)[^\n]*\n+', '', clean, flags=_re_sn.IGNORECASE).strip()
+            if not doc_body:
+                doc_body = clean
+            logger.info("Safety Net: Auto-typing conversational response into '%s' (%d chars)", target_app, len(doc_body))
+            yield f"\n\n*Typing content into {target_app}...*\n"
+            await execute_tool("type_text", {"text": doc_body, "window_title": target_app})
+            _update_pronoun_state("type_text", {"text": doc_body, "window_title": target_app})
+        elif clean:
             yield clean
 
     # ═══ AGENTIC LOOP: keep executing tools until the LLM stops requesting ═══
@@ -1749,8 +1916,6 @@ async def jarvis_chat(
 
         # Track already-opened apps to prevent duplicate open_app calls
         _opened_apps: set[str] = set()
-        # Track the last opened app for window_title inference
-        _last_opened_app: str = ""
 
         for round_num in range(MAX_TOOL_ROUNDS):
             # Execute all tool calls from this round
@@ -1937,9 +2102,19 @@ async def jarvis_chat(
                     from llm.providers import _tools_as_prompt_text
                     loop_system = _tools_as_prompt_text(loop_tools, system_prompt)
                     loop_system += (
-                        "\n\nIMPORTANT: When the user asks you to do something, you MUST call a tool. "
-                        "Respond with a JSON tool call like: {\"tool\": \"open_app\", \"args\": {\"app_name\": \"notepad\"}} "
-                        "Do NOT describe what you would do — actually call the tool."
+                        "\n\n## CRITICAL RULES FOR TOOL CALLING\n"
+                        "When the user asks you to DO something (open app, write text, search, etc.), "
+                        "you MUST respond ONLY with JSON tool call(s). Do NOT explain or plan — just output the JSON.\n\n"
+                        "Example: User says \"open notepad and write hello\"\n"
+                        "Your response must be ONLY:\n"
+                        "```json\n"
+                        "{\"tool\": \"open_app\", \"args\": {\"app_name\": \"notepad\"}}\n"
+                        "```\n"
+                        "```json\n"
+                        "{\"tool\": \"type_text\", \"args\": {\"text\": \"hello\", \"window_title\": \"notepad\"}}\n"
+                        "```\n\n"
+                        "NEVER explain what you would do. NEVER say 'I will' or 'We need to'. "
+                        "NEVER describe steps. Just output the tool call JSON blocks."
                     )
                     async for event in stream_chat_with_tools(
                         provider=provider,

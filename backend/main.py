@@ -802,16 +802,59 @@ async def chat(request: ChatRequest):
 
         status_messages = []
 
+        from llm.jarvis import _parse_app_and_tab_intent
         if tool_name == "__compound_open_and_type":
-            app_name = tool_args["app_name"]
+            raw_app = tool_args["app_name"]
             text = tool_args["text"]
-            await execute_tool("open_app", {"app_name": app_name})
-            _update_pronoun_state("open_app", {"app_name": app_name})
-            status_messages.append(f"*Opening {app_name}...*")
-            await _aio_f.sleep(0.8)
-            await execute_tool("type_text", {"text": text, "window_title": app_name})
-            _update_pronoun_state("type_text", {"text": text, "window_title": app_name})
-            status_messages.append(f"*Typing text...*")
+            real_app, wants_tab, shortcut = _parse_app_and_tab_intent(raw_app)
+            await execute_tool("open_app", {"app_name": real_app})
+            _update_pronoun_state("open_app", {"app_name": real_app})
+            status_messages.append(f"*Opening {real_app}...*")
+            await _aio_f.sleep(1.0)
+            if wants_tab:
+                status_messages.append(f"*Opening new tab in {real_app}...*")
+                await execute_tool("send_keys", {"keys": shortcut})
+                await _aio_f.sleep(0.5)
+            status_messages.append(f"*Typing into {real_app}...*")
+            await execute_tool("type_text", {"text": text, "window_title": real_app})
+            _update_pronoun_state("type_text", {"text": text, "window_title": real_app})
+        elif tool_name == "__compound_generate_and_type":
+            raw_app = tool_args["app_name"]
+            full_prompt = tool_args.get("full_prompt", request.message)
+            real_app, wants_tab, shortcut = _parse_app_and_tab_intent(raw_app)
+            await execute_tool("open_app", {"app_name": real_app})
+            _update_pronoun_state("open_app", {"app_name": real_app})
+            status_messages.append(f"*Opening {real_app}...*")
+            await _aio_f.sleep(1.0)
+            if wants_tab:
+                status_messages.append(f"*Opening new tab in {real_app}...*")
+                await execute_tool("send_keys", {"keys": shortcut})
+                await _aio_f.sleep(0.5)
+            status_messages.append(f"*Generating content for {real_app}...*")
+            gen_prompt = f"Write the requested content for: '{full_prompt}'. Output ONLY the body of the document/essay/poem/code. Do NOT include intro conversational text like 'Here is the essay' or 'Sure'."
+            generated_text = ""
+            try:
+                from llm.providers import stream_chat_with_tools
+                async for event in stream_chat_with_tools(
+                    provider=provider,
+                    model=model,
+                    messages=[{"role": "user", "content": gen_prompt}],
+                    system_prompt="You are a document generator. Output ONLY the document text directly. No commentary.",
+                    tools=None,
+                    max_tokens=2048,
+                ):
+                    if event["type"] == "text":
+                        generated_text += event["content"]
+            except Exception as e:
+                logger.error("Failed to generate content in main.py: %s", e)
+                generated_text = f"Content for: {full_prompt}"
+
+            import re as _re_main_g
+            generated_text = _re_main_g.sub(r"<think>.*?</think>", "", generated_text, flags=_re_main_g.DOTALL).strip()
+            status_messages.append(f"*Typing into {real_app}...*")
+            await execute_tool("type_text", {"text": generated_text, "window_title": real_app})
+            _update_pronoun_state("type_text", {"text": generated_text, "window_title": real_app})
+            status_messages.append(f"Done~ Typed into {real_app}!")
         elif tool_name == "__compound_create_write_open":
             file_path = tool_args["path"]
             content = tool_args["content"]

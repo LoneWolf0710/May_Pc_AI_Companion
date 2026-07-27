@@ -97,6 +97,17 @@ def _tap_key(vk_code: int):
     _send_key(vk_code, key_up=True)
 
 
+def _release_all_modifiers():
+    """Force release all modifier keys (Ctrl, Alt, Shift, Win) to prevent stuck keys in Windows."""
+    # 0x11: VK_CONTROL, 0x12: VK_MENU (Alt), 0x10: VK_SHIFT, 0x5B: VK_LWIN
+    # 0xA0-0xA5: Left/Right variants of Shift, Ctrl, Alt
+    modifier_vks = [0x11, 0x12, 0x10, 0x5B, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5]
+    for vk in modifier_vks:
+        inp = INPUT(type=INPUT_KEYBOARD,
+                    _input=_INPUT_UNION(ki=KEYBDINPUT(wVk=vk, dwFlags=KEYEVENTF_KEYUP)))
+        _send_input(inp)
+
+
 def _send_unicode_char(char: str):
     for ch in char:
         code = ord(ch)
@@ -315,6 +326,7 @@ async def _press_key(params: dict) -> Any:
 
 async def _type_text_unicode(params: dict) -> Any:
     """Type text using SendInput char by char (short text)."""
+    import asyncio as _aio_type
     text = params.get("text", "")
     if not text:
         raise RuntimeError("No text provided")
@@ -329,6 +341,8 @@ async def _type_text_unicode(params: dict) -> Any:
         logger.warning("Could not focus window for typing — keystrokes may go to wrong window")
     for ch in text:
         _send_unicode_char(ch)
+        # 5ms between chars prevents Notepad/apps from dropping keystrokes
+        await _aio_type.sleep(0.005)
     return {"typed": len(text)}
 
 
@@ -400,48 +414,51 @@ async def _type_text_clipboard(params: dict) -> Any:
     await _aio.sleep(0.1)
 
     # ── Step 2: Try paste strategies ──
-    _paste_strategies = [
-        ("ctrl+v", lambda: (
-            _send_key(VK_MAP["ctrl"], key_up=False),
-            _send_key(VK_MAP["v"], key_up=False),
-            _send_key(VK_MAP["v"], key_up=True),
-            _send_key(VK_MAP["ctrl"], key_up=True),
-        )),
-        ("shift+insert", lambda: (
-            _send_key(VK_MAP["shift"], key_up=False),
-            _send_key(VK_MAP["insert"], key_up=False),
-            _send_key(VK_MAP["insert"], key_up=True),
-            _send_key(VK_MAP["shift"], key_up=True),
-        )),
-    ]
-
-    for strategy_name, paste_fn in _paste_strategies:
-        try:
-            paste_fn()
-            await _aio.sleep(0.2)  # 200ms to ensure paste completes in slow apps
-            logger.info("Pasted %d chars via %s", len(text), strategy_name)
-            return {"typed": len(text), "method": f"clipboard_{strategy_name.replace('+', '_')}"}
-        except Exception as e:
-            logger.warning("Paste via %s failed: %s", strategy_name, e)
-            continue
-
-    # ── Step 3: PowerShell SendKeys fallback ──
     try:
-        ps_script = (
-            "$wsh = New-Object -ComObject WScript.Shell; "
-            "$wsh.SendKeys('^(v)')"  # Ctrl+V via SendKeys
-        )
-        success, output = await run_ps(ps_script)
-        if success:
-            await _aio.sleep(0.2)
-            logger.info("Pasted %d chars via PowerShell SendKeys", len(text))
-            return {"typed": len(text), "method": "clipboard_powershell"}
-    except Exception as e:
-        logger.warning("PowerShell SendKeys fallback failed: %s", e)
+        _paste_strategies = [
+            ("ctrl+v", lambda: (
+                _send_key(VK_MAP["ctrl"], key_up=False),
+                _send_key(VK_MAP["v"], key_up=False),
+                _send_key(VK_MAP["v"], key_up=True),
+                _send_key(VK_MAP["ctrl"], key_up=True),
+            )),
+            ("shift+insert", lambda: (
+                _send_key(VK_MAP["shift"], key_up=False),
+                _send_key(VK_MAP["insert"], key_up=False),
+                _send_key(VK_MAP["insert"], key_up=True),
+                _send_key(VK_MAP["shift"], key_up=True),
+            )),
+        ]
 
-    # ── All strategies failed — return what we have ──
-    logger.error("All paste strategies failed for %d chars", len(text))
-    return {"typed": len(text), "method": "clipboard_failed"}
+        for strategy_name, paste_fn in _paste_strategies:
+            try:
+                paste_fn()
+                await _aio.sleep(0.2)  # 200ms to ensure paste completes in slow apps
+                logger.info("Pasted %d chars via %s", len(text), strategy_name)
+                return {"typed": len(text), "method": f"clipboard_{strategy_name.replace('+', '_')}"}
+            except Exception as e:
+                logger.warning("Paste via %s failed: %s", strategy_name, e)
+                continue
+
+        # ── Step 3: PowerShell SendKeys fallback ──
+        try:
+            ps_script = (
+                "$wsh = New-Object -ComObject WScript.Shell; "
+                "$wsh.SendKeys('^(v)')"  # Ctrl+V via SendKeys
+            )
+            success, output = await run_ps(ps_script)
+            if success:
+                await _aio.sleep(0.2)
+                logger.info("Pasted %d chars via PowerShell SendKeys", len(text))
+                return {"typed": len(text), "method": "clipboard_powershell"}
+        except Exception as e:
+            logger.warning("PowerShell SendKeys fallback failed: %s", e)
+
+        # ── All strategies failed — return what we have ──
+        logger.error("All paste strategies failed for %d chars", len(text))
+        return {"typed": len(text), "method": "clipboard_failed"}
+    finally:
+        _release_all_modifiers()
 
 
 async def _hotkey(params: dict) -> Any:
@@ -456,12 +473,15 @@ async def _hotkey(params: dict) -> Any:
         if vk is None:
             raise RuntimeError(f"Unknown key in combo: '{part}'")
         vk_codes.append(vk)
-    # Press all modifier keys first
-    for vk in vk_codes:
-        _send_key(vk, key_up=False)
-    # Release in reverse order
-    for vk in reversed(vk_codes):
-        _send_key(vk, key_up=True)
+    try:
+        # Press all modifier keys first
+        for vk in vk_codes:
+            _send_key(vk, key_up=False)
+        # Release in reverse order
+        for vk in reversed(vk_codes):
+            _send_key(vk, key_up=True)
+    finally:
+        _release_all_modifiers()
     return {"hotkey": combo}
 
 

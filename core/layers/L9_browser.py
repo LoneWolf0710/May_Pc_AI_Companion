@@ -923,7 +923,8 @@ ACTION_MAP: dict[str, tuple[list, Any]] = {
     "handle_dialog":   ([_handle_dialog_action], None),
     "connect_to_browser": ([_connect_to_browser_action], None),
     # --- web_search (open Google search in browser) ---
-    "web_search":  ([_web_search_browser, _web_search_powershell], None),
+    # Try default browser first (Start-Process/cmd), then Playwright Chrome CDP as fallback
+    "web_search":  ([_web_search_powershell, _web_search_browser], None),
     # --- open_url (open URL in default browser) ---
     "open_url":    ([_open_url_startfile, _open_url_powershell], None),
     # --- extract_web_content (fetch URL and extract text) ---

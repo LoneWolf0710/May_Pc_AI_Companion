@@ -1577,7 +1577,7 @@ async def _stream_ollama_with_tools(
     num_ctx = int(get_gene("num_ctx", default=6144))
 
     # Cap num_ctx for small local models to avoid OOM / HTTP 500
-    _small_model_markers = ("phi4", "tiny", "mini", "3b", "1b", "qwen3:4b")
+    _small_model_markers = ("phi4", "tiny", "mini", "3b", "1b", "0.6b", "0.5b", "qwen3:4b")
     if any(m in model.lower() for m in _small_model_markers):
         num_ctx = min(num_ctx, 8192)
 
